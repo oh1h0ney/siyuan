@@ -86,7 +86,7 @@ jobs:
           draft: false
           prerelease: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          skipIfReleaseExists: true
+          replaceExisting: true
 
   build:
     runs-on: ${{ matrix.config.os }}
@@ -142,7 +142,7 @@ jobs:
             mingwsys: "MINGW64"
             goarch: "amd64"
             suffix: "win.exe"
-          - os: windows-latest
+          - os: windows-arm64
             name: windows build win-arm64.exe
             kernel_path: "../app/kernel/SiYuan-Kernel.exe"
             build_args_prefix: "-s -w -H=windowsgui -X"
