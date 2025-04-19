@@ -171,7 +171,7 @@ jobs:
         working-directory: ${{ github.workspace }}
 
       - name: Install MSVC ARM64
-        if: "matrix.config.goarch == 'arm64'" && "matrix.config.goos == 'windows'"
+        if: "matrix.config.goarch == 'arm64' && matrix.config.goos == 'windows'"
         run: |
           # 下载并安装 Visual Studio Build Tools（ARM64 组件）
           Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vs_buildtools.exe" -OutFile "$env:RUNNER_TEMP\vs_buildtools.exe"
