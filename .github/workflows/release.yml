@@ -142,7 +142,7 @@ jobs:
             mingwsys: "MINGW64"
             goarch: "amd64"
             suffix: "win.exe"
-          - os: windows-arm64
+          - os: windows-11-arm
             name: windows build win-arm64.exe
             kernel_path: "../app/kernel/SiYuan-Kernel.exe"
             build_args_prefix: "-s -w -H=windowsgui -X"
