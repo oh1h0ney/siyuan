@@ -1,7 +1,7 @@
-@import "content";
-@import "toolbar";
-@import "wysiwyg";
-@import "attr";
+@use "content" as *;
+@use "toolbar" as *;
+@use "wysiwyg" as *;
+@use "attr" as *;
 
 .protyle-scroll {
   --b3-dynamicscroll-width: 200px;
@@ -274,6 +274,13 @@
 .protyle-background {
   position: relative;
 
+  &:not(.protyle-background--enable) {
+    .protyle-background__img .protyle-icons,
+    .b3-chips__doctag .b3-chip__close {
+      display: none;
+    }
+  }
+
   &--enable {
     .protyle-background__img:hover .protyle-icons,
     .protyle-background__icon:hover {
@@ -296,7 +303,7 @@
   &__icon {
     height: 80px;
     width: 80px;
-    transition: var(--b3-transition);
+    transition: opacity 150ms linear;
     cursor: pointer;
     font-size: 68px; // 🔪显示不完整
     line-height: 80px;
@@ -407,12 +414,6 @@
       outline: none;
     }
   }
-}
-
-.protyle-cursor {
-  position: absolute;
-  right: 0;
-  top: 0;
 }
 
 table[contenteditable="false"] + .protyle-action__table > .table__resize {

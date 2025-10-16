@@ -18,6 +18,7 @@ package api
 
 import (
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path"
@@ -28,6 +29,7 @@ import (
 	"github.com/88250/gulu"
 	"github.com/88250/lute/parse"
 	"github.com/gin-gonic/gin"
+	"github.com/mssola/useragent"
 	"github.com/siyuan-community/siyuan/kernel/model"
 	"github.com/siyuan-community/siyuan/kernel/util"
 	"github.com/siyuan-note/logging"
@@ -425,7 +427,22 @@ func exportMdContent(c *gin.Context) {
 		yfm = arg["yfm"].(bool)
 	}
 
-	hPath, content := model.ExportMarkdownContent(id, refMode, embedMode, yfm)
+	fillCSSVar := false
+	if nil != arg["fillCSSVar"] {
+		fillCSSVar = arg["fillCSSVar"].(bool)
+	}
+
+	adjustHeadingLevel := false
+	if nil != arg["adjustHeadingLevel"] {
+		adjustHeadingLevel = arg["adjustHeadingLevel"].(bool)
+	}
+
+	imgTag := false
+	if nil != arg["imgTag"] {
+		imgTag = arg["imgTag"].(bool)
+	}
+
+	hPath, content := model.ExportMarkdownContent(id, refMode, embedMode, yfm, fillCSSVar, adjustHeadingLevel, imgTag)
 	ret.Data = map[string]interface{}{
 		"hPath":   hPath,
 		"content": content,
@@ -616,9 +633,22 @@ func exportPreview(c *gin.Context) {
 	}
 
 	id := arg["id"].(string)
-	stdHTML := model.Preview(id)
+
+	userAgentStr := c.GetHeader("User-Agent")
+	fillCSSVar := true
+	if userAgentStr != "" {
+		ua := useragent.New(userAgentStr)
+		name, _ := ua.Browser()
+		// Chrome、Edge、SiYuan 桌面端不需要替换 CSS 变量
+		if !ua.Mobile() && (name == "Chrome" || name == "Edge" || strings.Contains(userAgentStr, "Electron") || strings.Contains(userAgentStr, "SiYuan/")) {
+			fillCSSVar = false
+		}
+	}
+
+	stdHTML := model.Preview(id, fillCSSVar)
 	ret.Data = map[string]interface{}{
-		"html": stdHTML,
+		"html":       stdHTML,
+		"fillCSSVar": fillCSSVar,
 	}
 }
 
@@ -653,7 +683,13 @@ func exportAsFile(c *gin.Context) {
 	}
 
 	name := "file-" + file.Filename
+	typ := form.Value["type"][0]
+	exts, _ := mime.ExtensionsByType(typ)
+	if 0 < len(exts) && filepath.Ext(name) != exts[0] {
+		name += exts[0]
+	}
 	name = util.FilterFileName(name)
+	name = strings.ReplaceAll(name, "#", "_")
 	tmpDir := filepath.Join(util.TempDir, "export")
 	if err = os.MkdirAll(tmpDir, 0755); err != nil {
 		logging.LogErrorf("export as file failed: %s", err)
@@ -672,7 +708,6 @@ func exportAsFile(c *gin.Context) {
 	}
 
 	ret.Data = map[string]interface{}{
-		"name": name,
 		"file": path.Join("/export/", name),
 	}
 }

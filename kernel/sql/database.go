@@ -36,6 +36,7 @@ import (
 
 	"github.com/88250/gulu"
 	"github.com/88250/lute/ast"
+	"github.com/88250/lute/editor"
 	"github.com/88250/lute/html"
 	"github.com/88250/lute/parse"
 	"github.com/mattn/go-sqlite3"
@@ -666,8 +667,9 @@ func buildSpanFromNode(n *ast.Node, tree *parse.Tree, rootID, boxID, p string) (
 		return
 	case ast.NodeTextMark:
 		typ := treenode.TypeAbbr(n.Type.String()) + " " + n.TextMarkType
-		text := n.Content()
+		text := strings.TrimSuffix(n.Content(), string(gulu.ZWJ))
 		markdown := treenode.ExportNodeStdMd(n, luteEngine)
+		markdown = strings.ReplaceAll(markdown, string(gulu.ZWJ)+"#", "#")
 		parentBlock := treenode.ParentBlock(n)
 		span := &Span{
 			ID:       ast.NewNodeID(),
@@ -849,7 +851,7 @@ func buildBlockFromNode(n *ast.Node, tree *parse.Tree) (block *Block, attributes
 		fcontent = NodeStaticContent(fc, nil, true, false, true)
 
 		parentID = n.Parent.ID
-		if h := heading(n); nil != h { // 如果在标题块下方，则将标题块作为父节点
+		if h := treenode.HeadingParent(n); nil != h { // 如果在标题块下方，则将标题块作为父节点
 			parentID = h.ID
 		}
 		length = utf8.RuneCountInString(fcontent)
@@ -861,11 +863,21 @@ func buildBlockFromNode(n *ast.Node, tree *parse.Tree) (block *Block, attributes
 		content = NodeStaticContent(n, nil, true, indexAssetPath, true)
 
 		parentID = n.Parent.ID
-		if h := heading(n); nil != h {
+		if h := treenode.HeadingParent(n); nil != h {
 			parentID = h.ID
 		}
 		length = utf8.RuneCountInString(content)
 	}
+
+	// 剔除零宽空格 Database index content/markdown values no longer contain zero-width spaces https://github.com/siyuan-note/siyuan/issues/15204
+	fcontent = strings.ReplaceAll(fcontent, editor.Zwsp, "")
+	content = strings.ReplaceAll(content, editor.Zwsp, "")
+	markdown = strings.ReplaceAll(markdown, editor.Zwsp, "")
+
+	// 剔除标签结尾处的零宽连字符 Improve search for emojis in tags https://github.com/siyuan-note/siyuan/issues/15391
+	fcontent = strings.ReplaceAll(fcontent, string(gulu.ZWJ)+"#", "#")
+	content = strings.ReplaceAll(content, string(gulu.ZWJ)+"#", "#")
+	markdown = strings.ReplaceAll(markdown, string(gulu.ZWJ)+"#", "#")
 
 	block = &Block{
 		ID:       n.ID,
@@ -943,26 +955,6 @@ func tagFromNode(node *ast.Node) (ret string) {
 		return ast.WalkContinue
 	})
 	return strings.TrimSpace(tagBuilder.String())
-}
-
-func heading(node *ast.Node) *ast.Node {
-	if nil == node {
-		return nil
-	}
-
-	currentLevel := 16
-	if ast.NodeHeading == node.Type {
-		currentLevel = node.HeadingLevel
-	}
-
-	for prev := node.Previous; nil != prev; prev = prev.Previous {
-		if ast.NodeHeading == prev.Type {
-			if prev.HeadingLevel < currentLevel {
-				return prev
-			}
-		}
-	}
-	return nil
 }
 
 func deleteByBoxTx(tx *sql.Tx, box string) (err error) {
@@ -1540,4 +1532,23 @@ func SQLTemplateFuncs(templateFuncMap *template.FuncMap) {
 		ret, _ = Query(stmt, 1024)
 		return
 	}
+}
+
+func Vacuum() {
+	if nil != db {
+		if _, err := db.Exec("VACUUM"); nil != err {
+			logging.LogErrorf("vacuum database failed: %s", err)
+		}
+	}
+	if nil != historyDB {
+		if _, err := historyDB.Exec("VACUUM"); nil != err {
+			logging.LogErrorf("vacuum history database failed: %s", err)
+		}
+	}
+	if nil != assetContentDB {
+		if _, err := assetContentDB.Exec("VACUUM"); nil != err {
+			logging.LogErrorf("vacuum asset content database failed: %s", err)
+		}
+	}
+	return
 }

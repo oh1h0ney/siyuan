@@ -64,7 +64,7 @@ declare namespace Config {
          */
         openHelp: boolean;
         /**
-         * Publishing service
+         * Publish service
          * 发布服务
          */
         publish: IPublish;
@@ -270,17 +270,18 @@ declare namespace Config {
      */
     export type TLang =
         "en_US"
+        | "ar_SA"
+        | "de_DE"
         | "es_ES"
         | "fr_FR"
-        | "zh_CHT"
-        | "zh_CN"
-        | "ja_JP"
-        | "it_IT"
-        | "de_DE"
         | "he_IL"
-        | "ru_RU"
+        | "it_IT"
+        | "ja_JP"
         | "pl_PL"
-        | "ar_SA";
+        | "pt_BR"
+        | "ru_RU"
+        | "zh_CN"
+        | "zh_CHT";
 
     /**
      * SiYuan bazaar related configuration
@@ -398,6 +399,13 @@ declare namespace Config {
          * Whether the embedded block displays breadcrumbs
          */
         embedBlockBreadcrumb: boolean;
+        /**
+         * Heading embed mode for embedded blocks
+         * - `0`: Show title with blocks below (default)
+         * - `1`: Show only title
+         * - `2`: Show only blocks below title
+         */
+        headingEmbedMode: number;
         /**
          * Common emoji icons
          */
@@ -540,6 +548,10 @@ declare namespace Config {
          */
         markdownYFM: boolean;
         /**
+         * Whether to export the inline memo
+         */
+        inlineMemo: boolean;
+        /**
          * Pandoc executable file path
          */
         pandocBin: string;
@@ -638,6 +650,10 @@ declare namespace Config {
          * Whether to save the content of the .sy file as a single-line JSON object
          */
         useSingleLineSave: boolean;
+        /**
+         * The .sy and database .json files larger than this value will prompt a warning (unit: MB)
+         */
+        largeFileWarningSize: number;
     }
 
     /**
@@ -1069,29 +1085,29 @@ declare namespace Config {
     export type TLogLevel = "off" | "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 
     /**
-     * Publishing service
+     * Publish service
      */
     export interface IPublish {
         /**
-         * Whether to open the publishing service
+         * Whether to open the publish service
          */
         enable: boolean;
         /**
-         * The basic authentication settings of publishing service
+         * The basic authentication settings of publish service
          */
         auth: IPublishAuth;
         /**
-         * Port on which the publishing service listens
+         * Port on which the publish service listens
          */
         port: number;
     }
 
     /**
-     * Publishing service authentication settings
+     * Publish service authentication settings
      */
     export interface IPublishAuth {
         /**
-         * Whether to enable basic authentication for publishing services
+         * Whether to enable basic authentication for publish services
          */
         enable: boolean;
         /**
@@ -1510,10 +1526,6 @@ declare namespace Config {
          * The absolute path of the `data` directory of the current workspace
          */
         dataDir: string;
-        /**
-         * Whether to disable Google Analytics
-         */
-        disableGoogleAnalytics: boolean;
         /**
          * Whether to automatically download the installation package for the new version
          */
@@ -2057,6 +2069,10 @@ declare namespace Config {
      * SiYuan search tab configuration
      */
     export interface IUILayoutTabSearchConfig {
+        /**
+         * 搜索传入的查询内容
+         */
+        query?: string;
         /**
          * Grouping strategy
          * - `0`: No grouping

@@ -220,6 +220,10 @@ func InitConf() {
 	Conf.FileTree.DocCreateSavePath = util.TrimSpaceInPath(Conf.FileTree.DocCreateSavePath)
 	Conf.FileTree.RefCreateSavePath = util.TrimSpaceInPath(Conf.FileTree.RefCreateSavePath)
 	util.UseSingleLineSave = Conf.FileTree.UseSingleLineSave
+	if 2 > Conf.FileTree.LargeFileWarningSize {
+		Conf.FileTree.LargeFileWarningSize = 8
+	}
+	util.LargeFileWarningSize = Conf.FileTree.LargeFileWarningSize
 
 	util.CurrentCloudRegion = Conf.CloudRegion
 
@@ -232,6 +236,13 @@ func InitConf() {
 	}
 	if 1 > len(Conf.Editor.Emoji) {
 		Conf.Editor.Emoji = []string{}
+	}
+	for i, emoji := range Conf.Editor.Emoji {
+		if strings.Contains(emoji, ".") {
+			// XSS through emoji name https://github.com/siyuan-note/siyuan/issues/15034
+			emoji = util.FilterUploadEmojiFileName(emoji)
+			Conf.Editor.Emoji[i] = emoji
+		}
 	}
 	if 9 > Conf.Editor.FontSize || 72 < Conf.Editor.FontSize {
 		Conf.Editor.FontSize = 16
@@ -250,6 +261,9 @@ func InitConf() {
 	}
 	if 1 > Conf.Editor.HistoryRetentionDays {
 		Conf.Editor.HistoryRetentionDays = 30
+	}
+	if 3650 < Conf.Editor.HistoryRetentionDays {
+		Conf.Editor.HistoryRetentionDays = 3650
 	}
 	if conf.MinDynamicLoadBlocks > Conf.Editor.DynamicLoadBlocks {
 		Conf.Editor.DynamicLoadBlocks = conf.MinDynamicLoadBlocks
@@ -523,10 +537,6 @@ func InitConf() {
 	Conf.Save()
 	logging.SetLogLevel(Conf.LogLevel)
 
-	if Conf.System.DisableGoogleAnalytics {
-		logging.LogInfof("user has disabled [Google Analytics]")
-	}
-
 	util.SetNetworkProxy(Conf.System.NetworkProxy.String())
 
 	go util.InitPandoc()
@@ -692,7 +702,10 @@ func Close(force, setCurrentWorkspace bool, execInstallPkg int) (exitCode int) {
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		logging.LogInfof("exited kernel")
-		util.WebSocketServer.Close()
+		if nil != util.WebSocketServer {
+			util.WebSocketServer.Close()
+		}
+		util.HttpServing = false
 		os.Exit(logging.ExitCodeOk)
 	}()
 	return
@@ -872,7 +885,7 @@ func InitBoxes() {
 		box.UpdateHistoryGenerated() // 初始化历史生成时间为当前时间
 
 		if !initialized {
-			index(box.ID)
+			indexBox(box.ID)
 		}
 	}
 

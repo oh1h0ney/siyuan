@@ -170,7 +170,7 @@ export class Wnd {
             if (!window.siyuan.currentDragOverTabHeadersElement) {
                 window.siyuan.currentDragOverTabHeadersElement = it;
             } else {
-                if (!window.siyuan.currentDragOverTabHeadersElement.isSameNode(it)) {
+                if (window.siyuan.currentDragOverTabHeadersElement !== it) {
                     window.siyuan.currentDragOverTabHeadersElement.classList.remove("layout-tab-bars--drag");
                     window.siyuan.currentDragOverTabHeadersElement.querySelectorAll(".layout-tab-bar li[data-clone='true']").forEach(item => {
                         item.remove();
@@ -220,7 +220,7 @@ export class Wnd {
                 return;
             }
             it.classList.remove("layout-tab-bars--drag");
-            if (!newTabHeaderElement.isSameNode(oldTabHeaderElement) &&
+            if (newTabHeaderElement !== oldTabHeaderElement &&
                 ((oldTabHeaderElement.classList.contains("item--pin") && newTabHeaderElement.classList.contains("item--pin")) ||
                     (!oldTabHeaderElement.classList.contains("item--pin") && !newTabHeaderElement.classList.contains("item--pin")))) {
                 const rect = newTabHeaderElement.getClientRects()[0];
@@ -563,7 +563,7 @@ export class Wnd {
                     resize,
                 });
             }
-            if (window.siyuan.editorIsFullscreen) {
+            if (window.siyuan.editorIsFullscreen && !currentTab.model.editor.protyle.element.className.includes("fullscreen")) {
                 fullscreen(currentTab.model.editor.protyle.element);
                 setPadding(currentTab.model.editor.protyle);
             }
@@ -816,7 +816,7 @@ export class Wnd {
                     if (item.headElement.classList.contains("item--focus")) {
                         let latestHeadElement: HTMLElement;
                         Array.from(item.headElement.parentElement.children).forEach((headItem: HTMLElement) => {
-                            if (!headItem.isSameNode(item.headElement) &&
+                            if (headItem !== item.headElement &&
                                 headItem.style.maxWidth !== "0px"   // 不对比已移除但还在动画效果中的元素 https://github.com/siyuan-note/siyuan/issues/7878
                             ) {
                                 if (!latestHeadElement) {
@@ -974,6 +974,7 @@ export class Wnd {
             // 场景：没有打开的文档，点击标签面板打开
             return this;
         }
+        recordBeforeResizeTop();
         const wnd = new Wnd(this.app, direction);
         if (direction === this.parent.direction) {
             this.parent.addWnd(wnd, this.id);

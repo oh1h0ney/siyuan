@@ -37,12 +37,12 @@ import (
 	"github.com/88250/lute/render"
 	"github.com/siyuan-community/siyuan/kernel/cache"
 	"github.com/siyuan-community/siyuan/kernel/conf"
-	"github.com/siyuan-community/siyuan/kernel/filesys"
 	"github.com/siyuan-community/siyuan/kernel/search"
 	"github.com/siyuan-community/siyuan/kernel/sql"
 	"github.com/siyuan-community/siyuan/kernel/task"
 	"github.com/siyuan-community/siyuan/kernel/treenode"
 	"github.com/siyuan-community/siyuan/kernel/util"
+	"github.com/siyuan-note/dataparser"
 	"github.com/siyuan-note/eventbus"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
@@ -169,7 +169,7 @@ func GetDocHistoryContent(historyPath, keyword string, highlight bool) (id, root
 	isLargeDoc = 1024*1024*1 <= len(data)
 
 	luteEngine := NewLute()
-	historyTree, err := filesys.ParseJSONWithoutFix(data, luteEngine.ParseOptions)
+	historyTree, err := dataparser.ParseJSONWithoutFix(data, luteEngine.ParseOptions)
 	if err != nil {
 		logging.LogErrorf("parse tree from file [%s] failed: %s", historyPath, err)
 		return
@@ -318,8 +318,8 @@ func RollbackDocHistory(boxID, historyPath string) (err error) {
 	if writeErr := indexWriteTreeIndexQueue(tree); nil != writeErr {
 		return
 	}
-	util.PushReloadFiletree()
-	util.PushReloadProtyle(rootID)
+	ReloadFiletree()
+	ReloadProtyle(rootID)
 	util.PushMsg(Conf.Language(102), 3000)
 
 	IncSync()
@@ -355,13 +355,7 @@ func RollbackDocHistory(boxID, historyPath string) (err error) {
 		refDefIDs := getRefDefIDs(tree.Root)
 		// 推送定义节点引用计数
 		for _, defID := range refDefIDs {
-			defTree, _ := LoadTreeByBlockID(defID)
-			if nil != defTree {
-				defNode := treenode.GetNodeInTree(defTree, defID)
-				if nil != defNode {
-					task.AppendAsyncTaskWithDelay(task.SetDefRefCount, util.SQLFlushInterval, refreshRefCount, defTree.ID, defNode.ID)
-				}
-			}
+			task.AppendAsyncTaskWithDelay(task.SetDefRefCount, util.SQLFlushInterval, refreshRefCount, defID)
 		}
 	}()
 	return nil
@@ -677,7 +671,6 @@ func (box *Box) generateDocHistory0() {
 
 func clearOutdatedHistoryDir(historyDir string) {
 	if !gulu.File.IsExist(historyDir) {
-		logging.LogWarnf("history dir [%s] not exist", historyDir)
 		return
 	}
 

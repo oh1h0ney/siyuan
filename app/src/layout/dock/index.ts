@@ -19,7 +19,8 @@ import {hasClosestByClassName} from "../../protyle/util/hasClosest";
 import {App} from "../../index";
 import {Plugin} from "../../plugin";
 import {Custom} from "./Custom";
-import {recordBeforeResizeTop} from "../../protyle/util/resize";
+import {clearBeforeResizeTop, recordBeforeResizeTop} from "../../protyle/util/resize";
+import {Constants} from "../../constants";
 
 const TYPES = ["file", "outline", "inbox", "bookmark", "tag", "graph", "globalGraph", "backlink"];
 
@@ -185,13 +186,13 @@ export class Dock {
                 const targetItem = hasClosestByClassName(moveEvent.target as HTMLElement, "dock__item") ||
                     hasClosestByClassName(moveEvent.target as HTMLElement, "dock__items") as HTMLElement ||
                     hasClosestByClassName(moveEvent.target as HTMLElement, "dock__item--space") as HTMLElement;
-                if (targetItem && selectItem && targetItem.isSameNode(selectItem)) {
+                if (targetItem && selectItem && targetItem === selectItem) {
                     if (selectItem.classList.contains("dock__item--space")) {
                         const selectRect = selectItem.getBoundingClientRect();
                         if (selectItem.parentElement.id === "dockBottom") {
                             if (moveEvent.clientX < selectRect.right && moveEvent.clientX > selectRect.right - 40) {
                                 const lastFirstElement = selectItem.nextElementSibling.firstElementChild;
-                                if (lastFirstElement && lastFirstElement.isSameNode(item)) {
+                                if (lastFirstElement && lastFirstElement === item) {
                                     moveItem.classList.add("fn__none");
                                 } else {
                                     moveItem.classList.remove("fn__none");
@@ -201,7 +202,7 @@ export class Dock {
                         } else {
                             if (moveEvent.clientY < selectRect.bottom && moveEvent.clientY > selectRect.bottom - 40) {
                                 const lastFirstElement = selectItem.nextElementSibling.firstElementChild;
-                                if (lastFirstElement && lastFirstElement.isSameNode(item)) {
+                                if (lastFirstElement && lastFirstElement === item) {
                                     moveItem.classList.add("fn__none");
                                 } else {
                                     moveItem.classList.remove("fn__none");
@@ -210,7 +211,7 @@ export class Dock {
                             }
                         }
                     } else if (selectItem.classList.contains("dock__item--pin")) {
-                        if (item.nextElementSibling?.isSameNode(selectItem)) {
+                        if (item.nextElementSibling && item.nextElementSibling === selectItem) {
                             moveItem.classList.add("fn__none");
                         } else {
                             moveItem.classList.remove("fn__none");
@@ -220,14 +221,14 @@ export class Dock {
                         const selectRect = selectItem.getBoundingClientRect();
                         if (selectItem.parentElement.parentElement.id === "dockBottom") {
                             if (selectRect.left + selectRect.width / 2 > moveEvent.clientX) {
-                                if (item.nextElementSibling?.isSameNode(selectItem)) {
+                                if (item.nextElementSibling && item.nextElementSibling === selectItem) {
                                     moveItem.classList.add("fn__none");
                                 } else {
                                     moveItem.classList.remove("fn__none");
                                     selectItem.before(moveItem);
                                 }
                             } else {
-                                if (item.previousElementSibling?.isSameNode(selectItem)) {
+                                if (item.previousElementSibling && item.previousElementSibling === selectItem) {
                                     moveItem.classList.add("fn__none");
                                 } else {
                                     moveItem.classList.remove("fn__none");
@@ -236,14 +237,14 @@ export class Dock {
                             }
                         } else {
                             if (selectRect.top + selectRect.height / 2 > moveEvent.clientY) {
-                                if (item.nextElementSibling?.isSameNode(selectItem)) {
+                                if (item.nextElementSibling && item.nextElementSibling === selectItem) {
                                     moveItem.classList.add("fn__none");
                                 } else {
                                     moveItem.classList.remove("fn__none");
                                     selectItem.before(moveItem);
                                 }
                             } else {
-                                if (item.previousElementSibling?.isSameNode(selectItem)) {
+                                if (item.previousElementSibling && item.previousElementSibling === selectItem) {
                                     moveItem.classList.add("fn__none");
                                 } else {
                                     moveItem.classList.remove("fn__none");
@@ -265,8 +266,8 @@ export class Dock {
                     }
                     return;
                 }
-                if (!targetItem || targetItem.style.position === "fixed" || targetItem.isSameNode(item) || targetItem.id === "dockMoveItem") {
-                    if (targetItem && targetItem.isSameNode(item)) {
+                if (!targetItem || targetItem.style.position === "fixed" || (targetItem === item) || targetItem.id === "dockMoveItem") {
+                    if (targetItem && targetItem === item) {
                         moveItem.classList.add("fn__none");
                     }
                     return;
@@ -294,7 +295,7 @@ export class Dock {
                     } else if (moveItem.parentElement.parentElement.id === "dockRight") {
                         dock = window.siyuan.layout.rightDock;
                     }
-                    dock.add(moveItem.parentElement.isSameNode(dock.element.firstElementChild) ? 0 : 1, item, moveItem.previousElementSibling?.getAttribute("data-type"));
+                    dock.add(moveItem.parentElement === dock.element.firstElementChild ? 0 : 1, item, moveItem.previousElementSibling?.getAttribute("data-type"));
                 }
                 moveItem.remove();
             };
@@ -496,7 +497,9 @@ export class Dock {
         if (!type) {
             return;
         }
-        recordBeforeResizeTop();
+        if (this.pin) {
+            recordBeforeResizeTop();
+        }
         const target = this.element.querySelector(`[data-type="${type}"]`) as HTMLElement;
         if (show && target.classList.contains("dock__item--active")) {
             target.classList.remove("dock__item--active", "dock__item--activefocus");
@@ -519,6 +522,7 @@ export class Dock {
                     if (document.activeElement) {
                         (document.activeElement as HTMLElement).blur();
                     }
+                    clearBeforeResizeTop();
                     this.showDock();
                     return;
                 }
@@ -775,15 +779,14 @@ export class Dock {
         const sourceWnd = sourceDock.layout.children[parseInt(sourceElement.getAttribute("data-index"))] as Wnd;
         const sourceId = sourceElement.getAttribute("data-id");
         if (sourceId) {
-            sourceWnd.removeTab(sourceElement.getAttribute("data-id"));
+            sourceWnd.removeTab(sourceElement.getAttribute("data-id"), false, true, false);
             sourceElement.removeAttribute("data-id");
         }
         const hasActive = sourceElement.classList.contains("dock__item--active");
         if (hasActive) {
-            sourceDock.toggleModel(type);
+            sourceDock.toggleModel(type, false, false, false, false);
         }
         delete sourceDock.data[type];
-
         // 目标处理
         sourceElement.setAttribute("data-index", index.toString());
         if (previousType) {
@@ -801,7 +804,10 @@ export class Dock {
         if (hasActive) {
             this.toggleModel(type, true, false, false, false);
         }
-        saveLayout();
+        // 保存布局需等待动画完毕 https://github.com/siyuan-note/siyuan/issues/13507
+        setTimeout(() => {
+            saveLayout();
+        }, Constants.TIMEOUT_TRANSITION);
     }
 
     public remove(key: TDock | string) {

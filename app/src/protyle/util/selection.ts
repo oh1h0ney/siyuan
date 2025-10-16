@@ -109,7 +109,7 @@ export const selectAll = (protyle: IProtyle, nodeElement: Element, range: Range)
     }
     range.collapse(true);
     const selectElements = protyle.wysiwyg.element.querySelectorAll(".protyle-wysiwyg--select");
-    if (protyle.wysiwyg.element.childElementCount === selectElements.length && selectElements[0].parentElement.isSameNode(protyle.wysiwyg.element)) {
+    if (protyle.wysiwyg.element.childElementCount === selectElements.length && (selectElements[0].parentElement === protyle.wysiwyg.element)) {
         return true;
     }
     hideElements(["select"], protyle);
@@ -139,7 +139,7 @@ export const getEditorRange = (element: Element): Range => {
     let range: Range;
     if (getSelection().rangeCount > 0) {
         range = getSelection().getRangeAt(0);
-        if (element.isSameNode(range.startContainer) || element.contains(range.startContainer)) {
+        if (element === range.startContainer || element.contains(range.startContainer)) {
             // 有时候点击编辑器头部需要矫正到第一个块中
             if (range.toString() === "" && range.startContainer.nodeType === 1 && range.startOffset === 0 &&
                 (range.startContainer as HTMLElement).classList.contains("protyle-wysiwyg")) {
@@ -351,10 +351,6 @@ export const setLastNodeRange = (editElement: Element, range: Range, setStart = 
     }
     let lastNode = editElement.lastChild as Element;
     while (lastNode && lastNode.nodeType !== 3) {
-        if (lastNode.nodeType !== 3 && lastNode.tagName === "BR") {
-            // 防止单元格中 ⇧↓ 全部选中
-            return range;
-        }
         // https://github.com/siyuan-note/siyuan/issues/12792
         if (!lastNode.lastChild) {
             break;
@@ -367,14 +363,14 @@ export const setLastNodeRange = (editElement: Element, range: Range, setStart = 
         lastNode = editElement;
     }
     if (setStart) {
-        if (lastNode.nodeType !== 3 && lastNode.classList.contains("render-node") && lastNode.innerHTML === "") {
+        if (lastNode.nodeType !== 3 && (lastNode.classList.contains("render-node") || lastNode.tagName === "BR") && lastNode.innerHTML === "") {
             range.setStartAfter(lastNode);
         } else {
             range.setStart(lastNode, lastNode.textContent.length);
         }
     } else {
-        if (lastNode.nodeType !== 3 && lastNode.classList.contains("render-node") && lastNode.innerHTML === "") {
-            range.setStartAfter(lastNode);
+        if (lastNode.nodeType !== 3 && (lastNode.classList.contains("render-node") || lastNode.tagName === "BR") && lastNode.innerHTML === "") {
+            range.setEndAfter(lastNode);
         } else {
             range.setEnd(lastNode, lastNode.textContent.length);
         }
@@ -417,7 +413,7 @@ export const focusByOffset = (container: Element, start: number, end: number, is
     } else if (isFocus && (isNotEditBlock(container) || container.classList.contains("av"))) {
         return focusBlock(container);
     }
-    let startNode;
+    let startNode: Node;
     searchNode(container, container.firstChild, node => {
         if (node.nodeType === Node.TEXT_NODE) {
             const dataLength = (node as Text).data.length;
@@ -427,6 +423,14 @@ export const focusByOffset = (container: Element, start: number, end: number, is
             }
             start -= dataLength;
             end -= dataLength;
+            return false;
+        } else if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === "BR") {
+            if (start <= 1) {
+                startNode = node;
+                return true;
+            }
+            start -= 1;
+            end -= 1;
             return false;
         }
     });
@@ -448,7 +452,7 @@ export const focusByOffset = (container: Element, start: number, end: number, is
 
     const range = document.createRange();
     if (startNode) {
-        if (start < (startNode as Text).data.length) {
+        if (startNode.nodeType === Node.TEXT_NODE && start <= (startNode as Text).data.length) {
             range.setStart(startNode, start);
         } else {
             range.setStartAfter(startNode);
@@ -462,7 +466,7 @@ export const focusByOffset = (container: Element, start: number, end: number, is
     }
 
     if (endNode) {
-        if (end < (endNode as Text).data.length) {
+        if (end <= (endNode as Text).data.length) {
             range.setEnd(endNode, end);
         } else {
             range.setEndAfter(endNode);
@@ -481,7 +485,11 @@ export const focusByOffset = (container: Element, start: number, end: number, is
 };
 
 export const setInsertWbrHTML = (nodeElement: HTMLElement, range: Range, protyle: IProtyle) => {
-    const offset = getSelectionOffset(nodeElement, nodeElement, range);
+    const editElement = getContenteditableElement(nodeElement);
+    if (!editElement) {
+        return;
+    }
+    const offset = getSelectionOffset(editElement, nodeElement, range);
     const cloneNode = nodeElement.cloneNode(true) as HTMLElement;
     const cloneRange = focusByOffset(cloneNode, offset.end, offset.end, false);
     if (cloneRange) {
@@ -520,7 +528,7 @@ export const focusByWbr = (element: Element, range: Range) => {
         }
     } else {
         const wbrPreviousSibling = hasPreviousSibling(wbrElement);
-        if (wbrPreviousSibling && wbrElement.previousElementSibling.isSameNode(wbrPreviousSibling)) {
+        if (wbrPreviousSibling && wbrElement.previousElementSibling === wbrPreviousSibling) {
             if (wbrElement.previousElementSibling.lastChild?.nodeType === 3) {
                 // <em>text</em><wbr> 需把光标放在里面，因为 chrome 点击后也是默认在里面
                 range.setStart(wbrElement.previousElementSibling.lastChild, wbrElement.previousElementSibling.lastChild.textContent.length);
@@ -602,6 +610,7 @@ export const focusBlock = (element: Element, parentElement?: HTMLElement, toStar
                 range.setStart(cursorElement.firstChild, 0);
                 setRange = true;
             } else {
+                element.setAttribute("data-need-focus", "true");
                 return false;
             }
             /// #else
@@ -644,7 +653,7 @@ export const focusBlock = (element: Element, parentElement?: HTMLElement, toStar
         } else {
             let focusHljs = false;
             // 定位到末尾 https://github.com/siyuan-note/siyuan/issues/5982
-            if (cursorElement.classList.contains("hljs")) {
+            if (element.getAttribute("data-type") === "NodeCodeBlock") {
                 // 代码块末尾定位需在 /n 之前 https://github.com/siyuan-note/siyuan/issues/9141，https://github.com/siyuan-note/siyuan/issues/9189
                 let lastNode = cursorElement.lastChild;
                 if (!lastNode) {

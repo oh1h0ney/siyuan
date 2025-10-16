@@ -34,6 +34,7 @@ import (
 	"github.com/siyuan-community/siyuan/kernel/task"
 	"github.com/siyuan-community/siyuan/kernel/treenode"
 	"github.com/siyuan-community/siyuan/kernel/util"
+	"github.com/siyuan-note/dataparser"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 	"golang.org/x/time/rate"
@@ -42,7 +43,7 @@ import (
 func resetTree(tree *parse.Tree, titleSuffix string, removeAvBinding bool) {
 	tree.ID = ast.NewNodeID()
 	tree.Root.ID = tree.ID
-
+	title := tree.Root.IALAttr("title")
 	if "" != titleSuffix {
 		if t, parseErr := time.Parse("20060102150405", util.TimeFromID(tree.ID)); nil == parseErr {
 			titleSuffix += " " + t.Format("2006-01-02 15:04:05")
@@ -51,9 +52,12 @@ func resetTree(tree *parse.Tree, titleSuffix string, removeAvBinding bool) {
 		}
 		titleSuffix = "(" + titleSuffix + ")"
 		titleSuffix = " " + titleSuffix
+		if Conf.language(16) == title {
+			titleSuffix = ""
+		}
 	}
 	tree.Root.SetIALAttr("id", tree.ID)
-	tree.Root.SetIALAttr("title", tree.Root.IALAttr("title")+titleSuffix)
+	tree.Root.SetIALAttr("title", title+titleSuffix)
 	tree.Root.RemoveIALAttr("scroll")
 	p := path.Join(path.Dir(tree.Path), tree.ID) + ".sy"
 	tree.Path = p
@@ -162,7 +166,7 @@ func loadTree(localPath string, luteEngine *lute.Lute) (ret *parse.Tree, err err
 		return
 	}
 
-	ret, err = filesys.ParseJSONWithoutFix(data, luteEngine.ParseOptions)
+	ret, err = dataparser.ParseJSONWithoutFix(data, luteEngine.ParseOptions)
 	if err != nil {
 		logging.LogErrorf("parse json to tree [%s] failed: %s", localPath, err)
 		return
@@ -178,8 +182,6 @@ var (
 )
 
 func LoadTreeByBlockIDWithReindex(id string) (ret *parse.Tree, err error) {
-	// 仅提供给 getBlockInfo 接口使用
-
 	if "" == id {
 		logging.LogWarnf("block id is empty")
 		return nil, ErrTreeNotFound
@@ -192,8 +194,9 @@ func LoadTreeByBlockIDWithReindex(id string) (ret *parse.Tree, err error) {
 			return
 		}
 
-		// 尝试从文件系统加载
-		searchTreeInFilesystem(id)
+		// 尝试从文件系统加载并建立索引
+		indexTreeInFilesystem(id)
+
 		bt = treenode.GetBlockTree(id)
 		if nil == bt {
 			if "dev" == util.Mode {
@@ -243,7 +246,7 @@ func loadTreeByBlockTree(bt *treenode.BlockTree) (ret *parse.Tree, err error) {
 
 var searchTreeLimiter = rate.NewLimiter(rate.Every(3*time.Second), 1)
 
-func searchTreeInFilesystem(rootID string) {
+func indexTreeInFilesystem(rootID string) {
 	if !searchTreeLimiter.Allow() {
 		return
 	}
@@ -301,4 +304,17 @@ func searchTreeInFilesystem(rootID string) {
 	treenode.UpsertBlockTree(tree)
 	sql.IndexTreeQueue(tree)
 	logging.LogInfof("reindexed tree by filesystem [rootID=%s]", rootID)
+}
+
+func loadParentTree(tree *parse.Tree) (ret *parse.Tree) {
+	boxDir := filepath.Join(util.DataDir, tree.Box)
+	parentDir := path.Dir(tree.Path)
+	if parentDir == boxDir || parentDir == "/" {
+		return
+	}
+
+	luteEngine := lute.New()
+	parentPath := parentDir + ".sy"
+	ret, _ = filesys.LoadTree(tree.Box, parentPath, luteEngine)
+	return
 }

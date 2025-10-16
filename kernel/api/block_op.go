@@ -319,6 +319,13 @@ func moveBlock(c *gin.Context) {
 		return
 	}
 
+	currentBt := treenode.GetBlockTree(id)
+	if nil == currentBt {
+		ret.Code = -1
+		ret.Msg = "block not found [id=" + id + "]"
+		return
+	}
+
 	var parentID, previousID string
 	if nil != arg["parentID"] {
 		parentID = arg["parentID"].(string)
@@ -340,6 +347,19 @@ func moveBlock(c *gin.Context) {
 		}
 	}
 
+	var targetBt *treenode.BlockTree
+	if "" != previousID {
+		targetBt = treenode.GetBlockTree(previousID)
+	} else if "" != parentID {
+		targetBt = treenode.GetBlockTree(parentID)
+	}
+
+	if nil == targetBt {
+		ret.Code = -1
+		ret.Msg = "target block not found [id=" + parentID + "]"
+		return
+	}
+
 	transactions := []*model.Transaction{
 		{
 			DoOperations: []*model.Operation{
@@ -356,8 +376,10 @@ func moveBlock(c *gin.Context) {
 	model.PerformTransactions(&transactions)
 	model.FlushTxQueue()
 
-	ret.Data = transactions
-	broadcastTransactions(transactions)
+	model.ReloadProtyle(currentBt.RootID)
+	if currentBt.RootID != targetBt.RootID {
+		model.ReloadProtyle(targetBt.RootID)
+	}
 }
 
 func appendBlock(c *gin.Context) {
@@ -405,6 +427,54 @@ func appendBlock(c *gin.Context) {
 	broadcastTransactions(transactions)
 }
 
+func batchAppendBlock(c *gin.Context) {
+	ret := gulu.Ret.NewResult()
+	defer c.JSON(http.StatusOK, ret)
+
+	arg, ok := util.JsonArg(c, ret)
+	if !ok {
+		return
+	}
+
+	blocksArg := arg["blocks"].([]interface{})
+	var transactions []*model.Transaction
+	luteEngine := util.NewLute()
+	for _, blockArg := range blocksArg {
+		blockMap := blockArg.(map[string]interface{})
+		data := blockMap["data"].(string)
+		dataType := blockMap["dataType"].(string)
+		parentID := blockMap["parentID"].(string)
+		if util.InvalidIDPattern(parentID, ret) {
+			return
+		}
+		if "markdown" == dataType {
+			var err error
+			data, err = dataBlockDOM(data, luteEngine)
+			if err != nil {
+				ret.Code = -1
+				ret.Msg = "data block DOM failed: " + err.Error()
+				return
+			}
+		}
+
+		transactions = append(transactions, &model.Transaction{
+			DoOperations: []*model.Operation{
+				{
+					Action:   "appendInsert",
+					Data:     data,
+					ParentID: parentID,
+				},
+			},
+		})
+	}
+
+	model.PerformTransactions(&transactions)
+	model.FlushTxQueue()
+
+	ret.Data = transactions
+	broadcastTransactions(transactions)
+}
+
 func prependBlock(c *gin.Context) {
 	ret := gulu.Ret.NewResult()
 	defer c.JSON(http.StatusOK, ret)
@@ -441,6 +511,54 @@ func prependBlock(c *gin.Context) {
 				},
 			},
 		},
+	}
+
+	model.PerformTransactions(&transactions)
+	model.FlushTxQueue()
+
+	ret.Data = transactions
+	broadcastTransactions(transactions)
+}
+
+func batchPrependBlock(c *gin.Context) {
+	ret := gulu.Ret.NewResult()
+	defer c.JSON(http.StatusOK, ret)
+
+	arg, ok := util.JsonArg(c, ret)
+	if !ok {
+		return
+	}
+
+	blocksArg := arg["blocks"].([]interface{})
+	var transactions []*model.Transaction
+	luteEngine := util.NewLute()
+	for _, blockArg := range blocksArg {
+		blockMap := blockArg.(map[string]interface{})
+		data := blockMap["data"].(string)
+		dataType := blockMap["dataType"].(string)
+		parentID := blockMap["parentID"].(string)
+		if util.InvalidIDPattern(parentID, ret) {
+			return
+		}
+		if "markdown" == dataType {
+			var err error
+			data, err = dataBlockDOM(data, luteEngine)
+			if err != nil {
+				ret.Code = -1
+				ret.Msg = "data block DOM failed: " + err.Error()
+				return
+			}
+		}
+
+		transactions = append(transactions, &model.Transaction{
+			DoOperations: []*model.Operation{
+				{
+					Action:   "prependInsert",
+					Data:     data,
+					ParentID: parentID,
+				},
+			},
+		})
 	}
 
 	model.PerformTransactions(&transactions)
@@ -565,7 +683,9 @@ func updateBlock(c *gin.Context) {
 		var ops []*model.Operation
 		for n := oldTree.Root.FirstChild; nil != n; n = n.Next {
 			toRemoves = append(toRemoves, n)
-			ops = append(ops, &model.Operation{Action: "delete", ID: n.ID})
+			ops = append(ops, &model.Operation{Action: "delete", ID: n.ID, Data: map[string]interface{}{
+				"createEmptyParagraph": false, // 清空文档后前端不要创建空段落
+			}})
 		}
 		for _, n := range toRemoves {
 			n.Unlink()
@@ -595,6 +715,72 @@ func updateBlock(c *gin.Context) {
 				},
 			},
 		}
+	}
+
+	model.PerformTransactions(&transactions)
+	model.FlushTxQueue()
+
+	ret.Data = transactions
+	broadcastTransactions(transactions)
+}
+
+func batchInsertBlock(c *gin.Context) {
+	ret := gulu.Ret.NewResult()
+	defer c.JSON(http.StatusOK, ret)
+
+	arg, ok := util.JsonArg(c, ret)
+	if !ok {
+		return
+	}
+
+	blocksArg := arg["blocks"].([]interface{})
+	var transactions []*model.Transaction
+	luteEngine := util.NewLute()
+	for _, blockArg := range blocksArg {
+		blockMap := blockArg.(map[string]interface{})
+		data := blockMap["data"].(string)
+		dataType := blockMap["dataType"].(string)
+		var parentID, previousID, nextID string
+		if nil != blockMap["parentID"] {
+			parentID = blockMap["parentID"].(string)
+			if "" != parentID && util.InvalidIDPattern(parentID, ret) {
+				return
+			}
+		}
+		if nil != blockMap["previousID"] {
+			previousID = blockMap["previousID"].(string)
+			if "" != previousID && util.InvalidIDPattern(previousID, ret) {
+				return
+			}
+		}
+		if nil != blockMap["nextID"] {
+			nextID = blockMap["nextID"].(string)
+			if "" != nextID && util.InvalidIDPattern(nextID, ret) {
+				return
+			}
+		}
+
+		if "markdown" == dataType {
+			var err error
+			data, err = dataBlockDOM(data, luteEngine)
+			if err != nil {
+				ret.Code = -1
+				ret.Msg = "data block DOM failed: " + err.Error()
+				return
+			}
+		}
+
+		transactions = append(transactions, &model.Transaction{
+			DoOperations: []*model.Operation{
+				{
+					Action:     "insert",
+					Data:       data,
+					ParentID:   parentID,
+					PreviousID: previousID,
+					NextID:     nextID,
+				},
+			},
+		})
 	}
 
 	model.PerformTransactions(&transactions)
@@ -685,7 +871,9 @@ func batchUpdateBlock(c *gin.Context) {
 
 			for n := oldTree.Root.FirstChild; nil != n; n = n.Next {
 				toRemoves = append(toRemoves, n)
-				ops = append(ops, &model.Operation{Action: "delete", ID: n.ID})
+				ops = append(ops, &model.Operation{Action: "delete", ID: n.ID, Data: map[string]interface{}{
+					"createEmptyParagraph": false, // 清空文档后前端不要创建空段落
+				}})
 			}
 			for _, n := range toRemoves {
 				n.Unlink()

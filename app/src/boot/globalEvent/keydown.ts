@@ -16,7 +16,7 @@ import {
 import {newFile} from "../../util/newFile";
 import {Constants} from "../../constants";
 import {openSetting} from "../../config";
-import {getInstanceById} from "../../layout/util";
+import {getInstanceById, saveLayout} from "../../layout/util";
 import {getActiveTab, getDockByType, switchTabByIndex} from "../../layout/tabUtil";
 import {Tab} from "../../layout/Tab";
 import {Editor} from "../../editor";
@@ -80,7 +80,7 @@ import {bindAVPanelKeydown} from "../../protyle/render/av/keydown";
 const switchDialogEvent = (app: App, event: MouseEvent) => {
     event.preventDefault();
     let target = event.target as HTMLElement;
-    while (!target.isSameNode(switchDialog.element)) {
+    while (target !== switchDialog.element) {
         if (target.classList.contains("b3-list-item")) {
             const currentType = target.getAttribute("data-type");
             if (currentType) {
@@ -490,6 +490,7 @@ const editKeydown = (app: App, event: KeyboardEvent) => {
     }
     if (matchHotKey(window.siyuan.config.keymap.editor.general.preview.custom, event)) {
         setEditMode(protyle, "preview");
+        saveLayout();
         event.preventDefault();
         return true;
     }
@@ -497,11 +498,16 @@ const editKeydown = (app: App, event: KeyboardEvent) => {
         setEditMode(protyle, "wysiwyg");
         protyle.scroll.lastScrollTop = 0;
         fetchPost("/api/filetree/getDoc", {
-            id: protyle.block.parentID,
-            size: window.siyuan.config.editor.dynamicLoadBlocks,
+            id: protyle.block.id,
+            size: protyle.block.id === protyle.block.rootID ? window.siyuan.config.editor.dynamicLoadBlocks : Constants.SIZE_GET_MAX,
         }, getResponse => {
-            onGet({data: getResponse, protyle});
+            onGet({
+                data: getResponse,
+                protyle,
+                action: protyle.block.id === protyle.block.rootID ? [Constants.CB_GET_FOCUS, Constants.CB_GET_HTML, Constants.CB_GET_UNUNDO] : [Constants.CB_GET_ALL, Constants.CB_GET_FOCUS, Constants.CB_GET_UNUNDO, Constants.CB_GET_HTML]
+            });
         });
+        saveLayout();
         event.preventDefault();
         return true;
     }
@@ -595,6 +601,7 @@ const fileTreeKeydown = (app: App, event: KeyboardEvent) => {
             const liElement = files.element.querySelector(".b3-list-item");
             if (liElement) {
                 liElement.classList.add("b3-list-item--focus");
+                files.lastSelectedElement = liElement;
             }
             event.preventDefault();
         }
@@ -857,6 +864,7 @@ const fileTreeKeydown = (app: App, event: KeyboardEvent) => {
                     item.classList.remove("b3-list-item--focus");
                 });
                 parentElement.classList.add("b3-list-item--focus");
+                files.lastSelectedElement = parentElement;
                 const parentRect = parentElement.getBoundingClientRect();
                 const fileRect = files.element.getBoundingClientRect();
                 if (parentRect.top < fileRect.top || parentRect.bottom > fileRect.bottom) {
@@ -889,6 +897,7 @@ const fileTreeKeydown = (app: App, event: KeyboardEvent) => {
                     item.classList.remove("b3-list-item--focus");
                 });
                 nextElement.classList.add("b3-list-item--focus");
+                files.lastSelectedElement = nextElement;
                 const nextRect = nextElement.getBoundingClientRect();
                 const fileRect = files.element.getBoundingClientRect();
                 if (nextRect.top < fileRect.top || nextRect.bottom > fileRect.bottom) {
@@ -922,6 +931,7 @@ const fileTreeKeydown = (app: App, event: KeyboardEvent) => {
                     item.classList.remove("b3-list-item--focus");
                 });
                 previousElement.classList.add("b3-list-item--focus");
+                files.lastSelectedElement = previousElement;
                 const previousRect = previousElement.getBoundingClientRect();
                 const fileRect = files.element.getBoundingClientRect();
                 if (previousRect.top < fileRect.top || previousRect.bottom > fileRect.bottom) {
@@ -1436,7 +1446,8 @@ export const windowKeyDown = (app: App, event: KeyboardEvent) => {
         }
 
         // 闪卡长按 Esc 光标定位到闪卡按钮上 https://github.com/siyuan-note/siyuan/issues/12989
-        if (document.activeElement && hasClosestByClassName(document.activeElement, "card__action")) {
+        // https://github.com/siyuan-note/siyuan/issues/14730
+        if (event.repeat && document.activeElement && hasClosestByClassName(document.activeElement, "card__action")) {
             return;
         }
 
@@ -1731,6 +1742,26 @@ export const sendGlobalShortcut = (app: App) => {
     ipcRenderer.send(Constants.SIYUAN_HOTKEY, {
         languages: window.siyuan.languages["_trayMenu"],
         hotkeys
+    });
+    /// #endif
+};
+
+
+export const sendUnregisterGlobalShortcut = (app: App) => {
+    /// #if !BROWSER
+    ipcRenderer.send(Constants.SIYUAN_CMD, {
+        cmd: "unregisterGlobalShortcut",
+        accelerator: window.siyuan.config.keymap.general.toggleWin.custom
+    });
+    app.plugins.forEach(plugin => {
+        plugin.commands.forEach(command => {
+            if (command.globalCallback) {
+                ipcRenderer.send(Constants.SIYUAN_CMD, {
+                    cmd: "unregisterGlobalShortcut",
+                    accelerator: command.customHotkey
+                });
+            }
+        });
     });
     /// #endif
 };

@@ -1,4 +1,4 @@
-import {genEmptyElement, insertEmptyBlock} from "../../block/util";
+import {genEmptyElement, genHeadingElement, insertEmptyBlock} from "../../block/util";
 import {focusByRange, focusByWbr, getSelectionOffset, setLastNodeRange} from "../util/selection";
 import {
     getContenteditableElement,
@@ -18,6 +18,7 @@ import {mathRender} from "../render/mathRender";
 import {isMobile} from "../../util/functions";
 import {processRender} from "../util/processCode";
 import {hasClosestByAttribute, hasClosestByClassName} from "../util/hasClosest";
+import {blockRender} from "../render/blockRender";
 
 export const enter = (blockElement: HTMLElement, range: Range, protyle: IProtyle) => {
     if (hasClosestByClassName(blockElement, "protyle-wysiwyg__embed")) {
@@ -30,24 +31,11 @@ export const enter = (blockElement: HTMLElement, range: Range, protyle: IProtyle
         hideElements(["select"], protyle);
         return;
     }
+    protyle.observerLoad?.disconnect();
     // https://github.com/siyuan-note/siyuan/issues/5471
     if (disableElement ||
         // https://github.com/siyuan-note/siyuan/issues/10633
         blockElement.classList.contains("table")) {
-        if (blockElement.parentElement.classList.contains("li")) {
-            const oldHTML = blockElement.parentElement.parentElement.outerHTML;
-            const newElement = genListItemElement(blockElement.parentElement, 0, true);
-            blockElement.parentElement.insertAdjacentElement("afterend", newElement);
-            updateTransaction(protyle, blockElement.parentElement.parentElement.getAttribute("data-node-id"), blockElement.parentElement.parentElement.outerHTML, oldHTML);
-            focusByWbr(newElement, range);
-            removeEmptyNode(newElement);
-            scrollCenter(protyle);
-            return;
-        }
-        if (blockElement.classList.contains("hr")) {
-            insertEmptyBlock(protyle, "afterend");
-            return;
-        }
         if (blockElement.classList.contains("protyle-wysiwyg--select") && blockElement.classList.contains("render-node")) {
             protyle.toolbar.showRender(protyle, blockElement);
         } else {
@@ -64,11 +52,14 @@ export const enter = (blockElement: HTMLElement, range: Range, protyle: IProtyle
     if (blockElement.getAttribute("data-type") === "NodeAttributeView") {
         return true;
     }
-    // 代码块
-    const trimStartText = editableElement.innerHTML.trimStart();
-    if (trimStartText.startsWith("```") || trimStartText.startsWith("···") || trimStartText.startsWith("~~~") ||
-        trimStartText.indexOf("\n```") > -1 || trimStartText.indexOf("\n~~~") > -1 || trimStartText.indexOf("\n···") > -1) {
-        if (trimStartText.indexOf("\n") === -1 && trimStartText.replace(/·|~/g, "`").replace(/^`{3,}/g, "").indexOf("`") > -1) {
+
+    const trimStartHTML = editableElement.innerHTML.trimStart();
+    const trimStartText = editableElement.textContent.trimStart();
+    if (trimStartHTML.startsWith("```") || trimStartHTML.startsWith("···") || trimStartHTML.startsWith("~~~") ||
+        (trimStartHTML.indexOf("\n```") > -1 && trimStartText.indexOf("\n```") > -1) ||
+        (trimStartHTML.indexOf("\n~~~") > -1 && trimStartText.indexOf("\n~~~") > -1) ||
+        (trimStartHTML.indexOf("\n···") > -1 && trimStartText.indexOf("\n···") > -1)) {
+        if (trimStartHTML.indexOf("\n") === -1 && trimStartHTML.replace(/·|~/g, "`").replace(/^`{3,}/g, "").indexOf("`") > -1) {
             // ```test` 不处理，正常渲染为段落块
         } else if (blockElement.classList.contains("p")) { // https://github.com/siyuan-note/siyuan/issues/6953
             const oldHTML = blockElement.outerHTML;
@@ -105,6 +96,7 @@ export const enter = (blockElement: HTMLElement, range: Range, protyle: IProtyle
             return true;
         }
     }
+    // 代码块
     if (blockElement.getAttribute("data-type") === "NodeCodeBlock") {
         const wbrElement = document.createElement("wbr");
         range.insertNode(wbrElement);
@@ -228,7 +220,11 @@ export const enter = (blockElement: HTMLElement, range: Range, protyle: IProtyle
     }
     const id = blockElement.getAttribute("data-node-id");
     const newElement = document.createElement("div");
-    newElement.appendChild(genEmptyElement(false, false));
+    if (blockElement.getAttribute("data-type") === "NodeHeading" && blockElement.getAttribute("fold") === "1") {
+        newElement.innerHTML = genHeadingElement(blockElement, true) as string;
+    } else {
+        newElement.appendChild(genEmptyElement(false, false));
+    }
     const newEditableElement = newElement.querySelector('[contenteditable="true"]');
     newEditableElement.appendChild(range.extractContents());
     const selectWbrElement = newEditableElement.querySelector("wbr");
@@ -236,9 +232,12 @@ export const enter = (blockElement: HTMLElement, range: Range, protyle: IProtyle
         selectWbrElement.parentElement.outerHTML = "<wbr>";
     }
     const newHTML = newEditableElement.innerHTML.trimStart();
+    const newText = newEditableElement.textContent.trimStart();
     // https://github.com/siyuan-note/siyuan/issues/10759
     if (newHTML.startsWith("```") || newHTML.startsWith("···") || newHTML.startsWith("~~~") ||
-        newHTML.indexOf("\n```") > -1 || newHTML.indexOf("\n~~~") > -1 || newHTML.indexOf("\n···") > -1) {
+        (newHTML.indexOf("\n```") > -1 && newText.indexOf("\n```") > -1) ||
+        (newHTML.indexOf("\n~~~") > -1 && newText.indexOf("\n~~~") > -1) ||
+        (newHTML.indexOf("\n···") > -1 && newText.indexOf("\n···") > -1)) {
         if (newHTML.indexOf("\n") === -1 && newHTML.replace(/·|~/g, "`").replace(/^`{3,}/g, "").indexOf("`") > -1) {
             // ```test` 不处理，正常渲染为段落块
         } else {
@@ -290,7 +289,11 @@ export const enter = (blockElement: HTMLElement, range: Range, protyle: IProtyle
                 id: item.dataset.nodeId,
             });
         }
-        mathRender(item);
+        if (item.dataset.type === "NodeBlockQueryEmbed") {
+            blockRender(protyle, item);
+        } else {
+            mathRender(item);
+        }
         currentElement = item;
         selectsElement.push(item);
     });
@@ -310,6 +313,8 @@ export const enter = (blockElement: HTMLElement, range: Range, protyle: IProtyle
         currentElement.insertAdjacentElement("afterend", item);
         if (item.classList.contains("code-block")) {
             highlightRender(item);
+        } else if (item.dataset.type === "NodeBlockQueryEmbed") {
+            blockRender(protyle, item);
         } else {
             mathRender(currentElement.nextElementSibling);
         }
@@ -390,7 +395,7 @@ const listEnter = (protyle: IProtyle, blockElement: HTMLElement, range: Range) =
     let newElement;
     if (subListElement && listItemElement.getAttribute("fold") !== "1" &&
         // 子列表下的段落块回车 https://ld246.com/article/1623919354587
-        blockElement.nextElementSibling.isSameNode(subListElement)) {
+        blockElement.nextElementSibling === subListElement) {
         // 含有子列表的换行
         if (position.end >= editableElement.textContent.length -
             // 数学公式结尾会有 zwsp https://github.com/siyuan-note/siyuan/issues/6679
@@ -510,17 +515,16 @@ const listEnter = (protyle: IProtyle, blockElement: HTMLElement, range: Range) =
     // 文字和图片中间回车后图片前需添加 zwsp
     newEditableElement.parentElement.outerHTML = protyle.lute.SpinBlockDOM(newEditableElement.parentElement.outerHTML);
     listItemElement.insertAdjacentElement("afterend", newElement);
+    blockRender(protyle, newElement);
     mathRender(newElement);
+    processRender(newElement);
     // https://github.com/siyuan-note/siyuan/issues/3850
     // https://github.com/siyuan-note/siyuan/issues/6018
-    if ((editableElement?.lastElementChild?.getAttribute("data-type") || "").indexOf("inline-math") > -1 &&
-        !hasNextSibling(editableElement?.lastElementChild)) {
-        editableElement.insertAdjacentText("beforeend", "\n");
-    }
     // img 后有文字，在 img 后换行
-    if (editableElement?.lastElementChild?.classList.contains("img") && !hasNextSibling(editableElement?.lastElementChild)) {
-        editableElement.insertAdjacentText("beforeend", Constants.ZWSP);
-    }
+    editableElement.parentElement.outerHTML = protyle.lute.SpinBlockDOM(editableElement.parentElement.outerHTML);
+    blockRender(protyle, listItemElement);
+    mathRender(listItemElement);
+    processRender(listItemElement);
     if (listItemElement.getAttribute("data-subtype") === "o") {
         updateListOrder(listItemElement.parentElement);
     }

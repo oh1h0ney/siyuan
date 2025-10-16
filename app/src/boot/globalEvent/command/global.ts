@@ -8,7 +8,7 @@ import {popSearch} from "../../../mobile/menu/search";
 import {getRecentDocs} from "../../../mobile/menu/getRecentDocs";
 /// #else
 import {openNewWindow} from "../../../window/openNewWindow";
-import {toggleDockBar} from "../../../layout/dock/util";
+import {selectOpenTab, toggleDockBar} from "../../../layout/dock/util";
 import {openGlobalSearch} from "../../../search/util";
 import {workspaceMenu} from "../../../menus/workspace";
 import {isWindow} from "../../../util/functions";
@@ -27,7 +27,6 @@ import {
 } from "../../../layout/tabUtil";
 import {openSetting} from "../../../config";
 import {Tab} from "../../../layout/Tab";
-import {Files} from "../../../layout/dock/Files";
 /// #endif
 /// #if !BROWSER
 import {ipcRenderer} from "electron";
@@ -41,32 +40,6 @@ import {openCard} from "../../../card/openCard";
 import {syncGuide} from "../../../sync/syncGuide";
 import {Wnd} from "../../../layout/Wnd";
 import {unsplitWnd} from "../../../menus/tab";
-
-const selectOpenTab = () => {
-    /// #if MOBILE
-    if (window.siyuan.mobile.editor?.protyle) {
-        openDock("file");
-        window.siyuan.mobile.docks.file.selectItem(window.siyuan.mobile.editor.protyle.notebookId, window.siyuan.mobile.editor.protyle.path);
-    }
-    /// #else
-    const dockFile = getDockByType("file");
-    if (!dockFile) {
-        return false;
-    }
-    const files = dockFile.data.file as Files;
-    const element = document.querySelector(".layout__wnd--active > .fn__flex > .layout-tab-bar > .item--focus") ||
-        document.querySelector("ul.layout-tab-bar > .item--focus");
-    if (element) {
-        const tab = getInstanceById(element.getAttribute("data-id")) as Tab;
-        if (tab && tab.model instanceof Editor) {
-            tab.model.editor.protyle.wysiwyg.element.blur();
-            tab.model.editor.protyle.title.editElement.blur();
-            files.selectItem(tab.model.editor.protyle.notebookId, tab.model.editor.protyle.path);
-        }
-    }
-    dockFile.toggleModel("file", true);
-    /// #endif
-};
 
 export const globalCommand = (command: string, app: App) => {
     /// #if MOBILE
@@ -274,11 +247,22 @@ export const globalCommand = (command: string, app: App) => {
             }
             return true;
         }
-        const tab = getActiveTab(false);
+
+        const tab = getActiveTab();
         if (tab) {
             tab.parent.removeTab(tab.id);
+            return true;
         }
-        return true;
+        // https://github.com/siyuan-note/siyuan/issues/14729
+        if (window.siyuan.blockPanels.length > 0) {
+            window.siyuan.blockPanels[window.siyuan.blockPanels.length - 1]?.destroy();
+            return true;
+        }
+        const noFocusTab = getActiveTab(false);
+        if (noFocusTab) {
+            noFocusTab.parent.removeTab(noFocusTab.id);
+            return true;
+        }
     }
     if (command === "closeOthers" || command === "closeAll") {
         const tab = getActiveTab(false);

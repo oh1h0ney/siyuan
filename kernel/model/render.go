@@ -29,6 +29,7 @@ import (
 	"github.com/88250/lute/html"
 	"github.com/88250/lute/parse"
 	"github.com/88250/lute/render"
+	"github.com/siyuan-community/siyuan/kernel/av"
 	"github.com/siyuan-community/siyuan/kernel/sql"
 	"github.com/siyuan-community/siyuan/kernel/treenode"
 	"github.com/siyuan-community/siyuan/kernel/util"
@@ -177,10 +178,22 @@ func fillBlockRefCount(nodes []*ast.Node) {
 func renderBlockDOMByNodes(nodes []*ast.Node, luteEngine *lute.Lute) string {
 	tree := &parse.Tree{Root: &ast.Node{Type: ast.NodeDocument}, Context: &parse.Context{ParseOption: luteEngine.ParseOptions}}
 	blockRenderer := render.NewProtyleRenderer(tree, luteEngine.RenderOptions)
-	for _, n := range nodes {
-		ast.Walk(n, func(node *ast.Node, entering bool) ast.WalkStatus {
-			rendererFunc := blockRenderer.RendererFuncs[node.Type]
-			return rendererFunc(node, entering)
+	for _, node := range nodes {
+		ast.Walk(node, func(n *ast.Node, entering bool) ast.WalkStatus {
+			if entering {
+				if n.IsBlock() {
+					if avs := n.IALAttr(av.NodeAttrNameAvs); "" != avs {
+						// 填充属性视图角标 Display the database title on the block superscript https://github.com/siyuan-note/siyuan/issues/10545
+						avNames := getAvNames(n.IALAttr(av.NodeAttrNameAvs))
+						if "" != avNames {
+							n.SetIALAttr(av.NodeAttrViewNames, avNames)
+						}
+					}
+				}
+			}
+
+			rendererFunc := blockRenderer.RendererFuncs[n.Type]
+			return rendererFunc(n, entering)
 		})
 	}
 	h := strings.TrimSpace(blockRenderer.Writer.String())
@@ -289,9 +302,37 @@ func resolveEmbedR(n *ast.Node, blockEmbedMode int, luteEngine *lute.Lute, resol
 					} else if "h" == sqlBlock.Type {
 						h := treenode.GetNodeInTree(subTree, sqlBlock.ID)
 						var hChildren []*ast.Node
-						hChildren = append(hChildren, h)
-						hChildren = append(hChildren, treenode.HeadingChildren(h)...)
 
+						// 从嵌入块的 IAL 属性中解析 custom-heading-mode，默认值为 0
+						blockHeadingMode := 0 // 默认值
+						if customHeadingMode := n.IALAttr("custom-heading-mode"); "" != customHeadingMode {
+							if mode, err := strconv.Atoi(customHeadingMode); nil == err && (mode == 0 || mode == 1 || mode == 2) {
+								blockHeadingMode = mode
+							}
+						}
+
+						// 根据 blockHeadingMode 处理标题块的显示
+						// blockHeadingMode: 0=显示标题与下方的块，1=仅显示标题，2=仅显示标题下方的块
+						if 1 == blockHeadingMode {
+							// 仅显示标题
+							hChildren = append(hChildren, h)
+						} else if 2 == blockHeadingMode {
+							// 仅显示标题下方的块（默认行为）
+							if "1" != h.IALAttr("fold") {
+								children := treenode.HeadingChildren(h)
+								for _, c := range children {
+									if "1" == c.IALAttr("heading-fold") {
+										// 嵌入块包含折叠标题时不应该显示其下方块 https://github.com/siyuan-note/siyuan/issues/4765
+										continue
+									}
+									hChildren = append(hChildren, c)
+								}
+							}
+						} else {
+							// 0: 显示标题与下方的块
+							hChildren = append(hChildren, h)
+							hChildren = append(hChildren, treenode.HeadingChildren(h)...)
+						}
 						if 0 == blockEmbedMode {
 							embedTopLevel := 0
 							for _, hChild := range hChildren {
@@ -346,7 +387,18 @@ func resolveEmbedR(n *ast.Node, blockEmbedMode int, luteEngine *lute.Lute, resol
 						}
 					}
 					if 2 < len(n.KramdownIAL) && 0 < len(inserts) {
-						inserts[0].KramdownIAL = n.KramdownIAL
+						if bookmark := n.IALAttr("bookmark"); "" != bookmark {
+							inserts[0].SetIALAttr("bookmark", bookmark)
+						}
+						if name := n.IALAttr("name"); "" != name {
+							inserts[0].SetIALAttr("name", name)
+						}
+						if alias := n.IALAttr("alias"); "" != alias {
+							inserts[0].SetIALAttr("alias", alias)
+						}
+						if memo := n.IALAttr("memo"); "" != memo {
+							inserts[0].SetIALAttr("memo", memo)
+						}
 					}
 					for _, insert := range inserts {
 						n.InsertBefore(insert)

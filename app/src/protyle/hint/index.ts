@@ -6,11 +6,11 @@ import {
     focusByWbr,
     getEditorRange,
     getSelectionOffset,
-    getSelectionPosition
+    getSelectionPosition,
 } from "../util/selection";
 import {genHintItemHTML, hintEmbed, hintRef, hintSlash} from "./extend";
 import {getSavePath, newFile} from "../../util/newFile";
-import {upDownHint} from "../../util/upDownHint";
+import {isAbnormalItem, upDownHint} from "../../util/upDownHint";
 import {setPosition} from "../../util/setPosition";
 import {getContenteditableElement, hasNextSibling, hasPreviousSibling} from "../wysiwyg/getBlock";
 import {transaction, updateTransaction} from "../wysiwyg/transaction";
@@ -38,7 +38,7 @@ import {openMobileFileById} from "../../mobile/editor";
 import {processRender} from "../util/processCode";
 import {AIChat} from "../../ai/chat";
 import {isMobile} from "../../util/functions";
-import {isIPhone, isNotCtrl, isOnlyMeta} from "../util/compatibility";
+import {isNotCtrl, isOnlyMeta} from "../util/compatibility";
 import {avRender} from "../render/av/render";
 import {genIconHTML} from "../render/util";
 import {updateAttrViewCellAnimation} from "../render/av/action";
@@ -275,13 +275,27 @@ ${unicode2Emoji(emoji.unicode)}</button>`;
             const cellElement = hasClosestByClassName(protyle.toolbar.range.startContainer, "av__cell");
             if (cellElement) {
                 const cellRect = cellElement.getBoundingClientRect();
+                /// #if !MOBILE
                 setPosition(this.element, cellRect.left, cellRect.bottom, cellRect.height);
+                /// #else
+                setPosition(this.element, 0, 0);
+                /// #endif
             }
         } else {
             const textareaPosition = getSelectionPosition(protyle.wysiwyg.element);
+            /// #if !MOBILE
             setPosition(this.element, textareaPosition.left, textareaPosition.top + 26, 30);
+            /// #else
+            setPosition(this.element, 0, 0);
+            /// #endif
         }
         this.element.scrollTop = 0;
+        let currentHintElement = this.element.querySelector(".b3-list-item--focus") as HTMLElement;
+        while (isAbnormalItem(currentHintElement, "b3-list-item")) {
+            currentHintElement.classList.remove("b3-list-item--focus");
+            currentHintElement = currentHintElement.nextElementSibling as HTMLElement;
+            currentHintElement?.classList.add("b3-list-item--focus");
+        }
         this.bindUploadEvent(protyle, this.element);
         if (this.source !== "hint") {
             const searchElement = this.element.querySelector("input.b3-text-field") as HTMLInputElement;
@@ -427,11 +441,11 @@ ${genHintItemHTML(item)}
             if (!cellElement) {
                 return;
             }
-            const rowElement = hasClosestByClassName(cellElement, "av__row");
+            const rowElement = hasClosestByClassName(cellElement, nodeElement.getAttribute("data-av-type") === "table" ? "av__row" : "av__gallery-item");
             if (!rowElement) {
                 return;
             }
-            const previousID = cellElement.dataset.blockId;
+            const previousID = rowElement.dataset.id;
             const avID = nodeElement.getAttribute("data-av-id");
             let tempElement = document.createElement("div");
             tempElement.innerHTML = value.replace(/<mark>/g, "").replace(/<\/mark>/g, "");
@@ -534,9 +548,7 @@ ${genHintItemHTML(item)}
 
         if (this.lastIndex > -1) {
             range.setStart(range.startContainer, this.lastIndex);
-            if (isIPhone()) {
-                focusByRange(range);
-            }
+            focusByRange(range);
         }
         // 新建文件
         if (Constants.BLOCK_HINT_KEYS.includes(this.splitChar) && value.startsWith("((newFile ") && value.endsWith(`${Lute.Caret}'))`)) {
@@ -551,10 +563,14 @@ ${genHintItemHTML(item)}
                 }, response => {
                     // https://github.com/siyuan-note/siyuan/issues/10133
                     protyle.toolbar.range = range;
-                    protyle.toolbar.setInlineMark(protyle, "block-ref", "range", {
+                    const refElement = protyle.toolbar.setInlineMark(protyle, "block-ref", "range", {
                         type: "id",
                         color: `${response.data}${Constants.ZWSP}${refIsS ? "s" : "d"}${Constants.ZWSP}${(refIsS ? fileNames[0] : realFileName).substring(0, window.siyuan.config.editor.blockRefDynamicAnchorTextMaxLen)}`
                     });
+                    if (refElement[0]) {
+                        protyle.toolbar.range.setEnd(refElement[0].lastChild, refElement[0].lastChild.textContent.length);
+                    }
+                    protyle.toolbar.range.collapse(false);
                 });
             });
             return;
@@ -584,10 +600,14 @@ ${genHintItemHTML(item)}
                     tempElement.innerText = dynamicTexts[1];
                 }
             }
-            protyle.toolbar.setInlineMark(protyle, "block-ref", "range", {
+            const refElement = protyle.toolbar.setInlineMark(protyle, "block-ref", "range", {
                 type: "id",
                 color: `${tempElement.getAttribute("data-id")}${Constants.ZWSP}${tempElement.getAttribute("data-subtype")}${Constants.ZWSP}${tempElement.textContent}`
             });
+            if (refElement[0]) {
+                protyle.toolbar.range.setEnd(refElement[0].lastChild, refElement[0].lastChild.textContent.length);
+            }
+            protyle.toolbar.range.collapse(false);
             return;
         } else if (this.splitChar === ":") {
             addEmoji(value);
@@ -703,7 +723,7 @@ ${genHintItemHTML(item)}
                 focusByRange(range);
                 this.genEmojiHTML(protyle);
                 return;
-            } else if (value.indexOf("style") > -1) {
+            } else if (value.startsWith("style")) {
                 range.deleteContents();
                 this.fixImageCursor(range);
                 nodeElement.setAttribute("style", value.split(Constants.ZWSP)[1] || "");
@@ -834,7 +854,11 @@ ${genHintItemHTML(item)}
                     focusBlock(nodeElement);
                 } else if (nodeElement.classList.contains("av")) {
                     avRender(nodeElement, protyle, () => {
-                        (nodeElement.querySelector(".av__title") as HTMLInputElement).focus();
+                        const titleHTMLElement = nodeElement.querySelector(".av__title") as HTMLInputElement;
+                        titleHTMLElement.focus();
+                        range.setStart(titleHTMLElement, 0);
+                        range.collapse(true);
+                        focusByRange(range);
                     });
                 } else {
                     focusByWbr(nodeElement, range);
@@ -984,6 +1008,8 @@ ${genHintItemHTML(item)}
     }
 
     private getKey(currentLineValue: string, extend: IHintExtend[]) {
+        const prevSplit = this.splitChar;
+        const prevLastIndex = this.lastIndex;
         this.lastIndex = -1;
         this.splitChar = "";
         extend.forEach((item) => {
@@ -996,20 +1022,17 @@ ${genHintItemHTML(item)}
                 }
             }
             if (this.lastIndex < currentLastIndex) {
-                if (Constants.BLOCK_HINT_KEYS.includes(this.splitChar) &&
-                    (item.key === ":" || item.key === "#" || item.key === "/" || item.key === "、")) {
-                    // 块搜索中忽略以上符号
-                } else if (this.splitChar === "#" &&
-                    (item.key === "/" || item.key === "、")) {
-                    // 标签中忽略以上符号
-                } else {
-                    this.splitChar = item.key;
-                    this.lastIndex = currentLastIndex;
-                }
+                this.splitChar = item.key;
+                this.lastIndex = currentLastIndex;
             }
         });
         if (this.lastIndex === -1) {
             return undefined;
+        }
+        // 上一次提示没有结束时不能被其余提示干扰 https://github.com/siyuan-note/siyuan/issues/14324
+        if (!this.element.classList.contains("fn__none") && prevSplit && prevSplit !== this.splitChar) {
+            this.splitChar = prevSplit;
+            this.lastIndex = prevLastIndex;
         }
         // 冒号前为数字或冒号不进行emoji提示
         if (this.splitChar === ":") {

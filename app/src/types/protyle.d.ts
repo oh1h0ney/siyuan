@@ -26,7 +26,8 @@ type TProtyleAction = "cb-get-append" | // 向下滚动加载
     "cb-get-hl" | // 高亮
     "cb-get-focus" | // 光标定位
     "cb-get-focusfirst" | // 动态定位到第一个块
-    "cb-get-setid" | // 重置 blockid
+    "cb-get-setid" | // 无折叠大纲点击 重置 blockid
+    "cb-get-outline" | // 大纲点击
     "cb-get-all" | // 获取所有块
     "cb-get-backlink" | // 悬浮窗为传递型需展示上下文
     "cb-get-unundo" | // 不需要记录历史
@@ -280,6 +281,8 @@ declare class Lute {
     public HTML2Md(html: string): string;
 
     public HTML2BlockDOM(html: string): string;
+
+    public SetUnorderedListMarker(marker: string): void;
 }
 
 declare const webkitAudioContext: {
@@ -409,8 +412,8 @@ interface IHintData {
     id?: string;
     html: string;
     value: string;
-    filter?: string[]
-    focus?: boolean
+    filter?: string[];
+    focus?: boolean;
 }
 
 interface IHintExtend {
@@ -452,10 +455,12 @@ interface IProtyleOptions {
     render?: {
         background?: boolean
         title?: boolean
+        titleShowTop?: boolean
         gutter?: boolean
         scroll?: boolean
         breadcrumb?: boolean
         breadcrumbDocName?: boolean
+        hideTitleOnZoom?: boolean
     }
     /** 内部调试时使用 */
     _lutePath?: string;
@@ -475,6 +480,12 @@ interface IProtyleOptions {
     classes?: {
         preview?: string;
     };
+    click?: {
+        /** 点击末尾是否阻止插入新块 */
+        preventInsetEmptyBlock?: boolean
+    }
+
+    handleEmptyContent?(): void
 
     /** 编辑器异步渲染完成后的回调方法 */
     after?(protyle: import("../protyle").Protyle): void;

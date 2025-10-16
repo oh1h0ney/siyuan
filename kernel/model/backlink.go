@@ -32,6 +32,7 @@ import (
 	"github.com/siyuan-community/siyuan/kernel/filesys"
 	"github.com/siyuan-community/siyuan/kernel/search"
 	"github.com/siyuan-community/siyuan/kernel/sql"
+	"github.com/siyuan-community/siyuan/kernel/task"
 	"github.com/siyuan-community/siyuan/kernel/treenode"
 	"github.com/siyuan-community/siyuan/kernel/util"
 	"github.com/siyuan-note/logging"
@@ -43,14 +44,20 @@ func RefreshBacklink(id string) {
 }
 
 func refreshRefsByDefID(defID string) {
-	refs := sql.QueryRefsByDefID(defID, false)
+	refs := sql.QueryRefsByDefID(defID, true)
 	var rootIDs []string
 	for _, ref := range refs {
 		rootIDs = append(rootIDs, ref.RootID)
+		task.AppendAsyncTaskWithDelay(task.SetDefRefCount, util.SQLFlushInterval, refreshRefCount, ref.DefBlockID)
 	}
+	rootIDs = gulu.Str.RemoveDuplicatedElem(rootIDs)
 	trees := filesys.LoadTrees(rootIDs)
 	for _, tree := range trees {
 		sql.UpdateRefsTreeQueue(tree)
+		task.AppendAsyncTaskWithDelay(task.SetDefRefCount, util.SQLFlushInterval, refreshRefCount, tree.ID)
+	}
+	if bt := treenode.GetBlockTree(defID); nil != bt {
+		task.AppendAsyncTaskWithDelay(task.SetDefRefCount, util.SQLFlushInterval, refreshRefCount, defID)
 	}
 }
 
@@ -656,7 +663,48 @@ func buildLinkRefs(defRootID string, refs []*sql.Ref, keywords []string) (ret []
 			ret = append(ret, ref)
 		}
 	}
+
+	if 0 < len(keywords) {
+		// 过滤场景处理标题下方块 Improve backlink filtering below the heading https://github.com/siyuan-note/siyuan/issues/14929
+		headingRefChildren := map[string]*Block{}
+		var headingIDs []string
+		for _, link := range links {
+			for _, ref := range link.Refs {
+				if "NodeHeading" == ref.Type {
+					headingRefChildren[ref.ID] = ref
+					headingIDs = append(headingIDs, ref.ID)
+				}
+			}
+		}
+		var headingChildren []*Block
+		for _, headingID := range headingIDs {
+			sqlChildren := sql.GetChildBlocks(headingID, "", -1)
+			children := fromSQLBlocks(&sqlChildren, "", 12)
+			headingChildren = append(headingChildren, children...)
+		}
+		for _, child := range headingChildren {
+			if nil == child {
+				continue
+			}
+
+			if matchBacklinkKeyword(child, keywords) {
+				heading := headingRefChildren[child.ParentID]
+				if nil != heading && !existBlock(heading, ret) {
+					ret = append(ret, heading)
+				}
+			}
+		}
+	}
 	return
+}
+
+func existBlock(block *Block, blocks []*Block) bool {
+	for _, b := range blocks {
+		if block.ID == b.ID {
+			return true
+		}
+	}
+	return false
 }
 
 func matchBacklinkKeyword(block *Block, keywords []string) bool {
@@ -814,7 +862,7 @@ func searchBackmention(mentionKeywords []string, keyword string, excludeBacklink
 			if !entering || n.IsBlock() {
 				return ast.WalkContinue
 			}
-			if ast.NodeText == n.Type { // 这里包含了标签命中的情况，因为 Lute 没有启用 TextMark
+			if ast.NodeText == n.Type /* NodeText 包含了标签命中的情况 */ || ast.NodeLinkText == n.Type {
 				textBuf.Write(n.Tokens)
 			}
 			return ast.WalkContinue

@@ -51,7 +51,6 @@ export abstract class Constants {
     public static readonly SIYUAN_OPEN_WORKSPACE: string = "siyuan-open-workspace";
     public static readonly SIYUAN_OPEN_URL: string = "siyuan-open-url";
     public static readonly SIYUAN_OPEN_WINDOW: string = "siyuan-open-window";
-    public static readonly SIYUAN_OPEN_FOLDER: string = "siyuan-open-folder";
     public static readonly SIYUAN_OPEN_FILE: string = "siyuan-open-file";
 
     public static readonly SIYUAN_EXPORT_PDF: string = "siyuan-export-pdf";
@@ -127,7 +126,8 @@ export abstract class Constants {
     public static readonly CB_GET_HL = "cb-get-hl"; // 高亮
     public static readonly CB_GET_FOCUS = "cb-get-focus"; // 光标定位
     public static readonly CB_GET_FOCUSFIRST = "cb-get-focusfirst"; // 动态定位到第一个块
-    public static readonly CB_GET_SETID = "cb-get-setid"; // 重置 blockid
+    public static readonly CB_GET_SETID = "cb-get-setid"; // 无折叠大纲点击 重置 blockid
+    public static readonly CB_GET_OUTLINE = "cb-get-outline"; // 大纲点击
     public static readonly CB_GET_ALL = "cb-get-all"; // 获取所有块
     public static readonly CB_GET_BACKLINK = "cb-get-backlink"; // 悬浮窗为传递型需展示上下文
     public static readonly CB_GET_UNUNDO = "cb-get-unundo"; // 不需要记录历史
@@ -227,6 +227,7 @@ export abstract class Constants {
     public static readonly DIALOG_SAVEWORKSPACE = "dialog-saveworkspace"; // 保存工作空间
 
     // timeout
+    public static readonly TIMEOUT_OPENDIALOG = 50;
     public static readonly TIMEOUT_DBLCLICK = 190;
     public static readonly TIMEOUT_INPUT = 256;
     public static readonly TIMEOUT_LOAD = 300;
@@ -235,18 +236,19 @@ export abstract class Constants {
 
     // id
     public static readonly HELP_PATH: { [key: string]: string } = {
-        zh_CN: "20210808180117-czj9bvb",
-        zh_CHT: "20211226090932-5lcq56f",
-        ja_JP: "20240530133126-axarxgx",
-        en_US: "20210808180117-6v0mkxr",
-        fr_FR: "20210808180117-6v0mkxr",
-        es_ES: "20210808180117-6v0mkxr",
-        it_IT: "20210808180117-6v0mkxr",
+        ar_SA: "20210808180117-6v0mkxr",
         de_DE: "20210808180117-6v0mkxr",
+        en_US: "20210808180117-6v0mkxr",
+        es_ES: "20210808180117-6v0mkxr",
+        fr_FR: "20210808180117-6v0mkxr",
         he_IL: "20210808180117-6v0mkxr",
-        ru_RU: "20210808180117-6v0mkxr",
+        it_IT: "20210808180117-6v0mkxr",
+        ja_JP: "20240530133126-axarxgx",
         pl_PL: "20210808180117-6v0mkxr",
-        ar_SA: "20210808180117-6v0mkxr"
+        pt_BR: "20210808180117-6v0mkxr",
+        ru_RU: "20210808180117-6v0mkxr",
+        zh_CHT: "20211226090932-5lcq56f",
+        zh_CN: "20210808180117-czj9bvb",
     };
     public static readonly QUICK_DECK_ID = "20230218211946-2kw8jgx";
 
@@ -703,7 +705,7 @@ export abstract class Constants {
     public static readonly SIYUAN_ASSETS_EXTS: string[] = [".pdf"].concat(Constants.SIYUAN_ASSETS_IMAGE).concat(Constants.SIYUAN_ASSETS_AUDIO).concat(Constants.SIYUAN_ASSETS_VIDEO);
     public static readonly SIYUAN_ASSETS_SEARCH: string[] = [".txt", ".md", ".markdown", ".docx", ".xlsx", ".pptx", ".pdf", ".json", ".log", ".sql", ".html", ".xml", ".java", ".h", ".c",
         ".cpp", ".go", ".rs", ".swift", ".kt", ".py", ".php", ".js", ".css", ".ts", ".sh", ".bat", ".cmd", ".ini", ".yaml",
-        ".rst", ".adoc", ".textile", ".opml", ".org", ".wiki", ".epub"];
+        ".rst", ".adoc", ".textile", ".opml", ".org", ".wiki", ".epub", ".cs"];
 
     // protyle
     public static readonly SIYUAN_CONFIG_APPEARANCE_DARK_CODE: string[] = ["a11y-dark", "agate", "an-old-hope", "androidstudio",
@@ -759,7 +761,7 @@ export abstract class Constants {
     // common: "bash", "c", "csharp", "cpp", "css", "diff", "go", "xml", "json", "java", "javascript", "kotlin", "less", "lua", "makefile", "markdown", "objectivec", "php", "php-template", "perl", "plaintext", "python", "python-repl", "r", "ruby", "rust", "scss", "sql", "shell", "swift", "ini", "typescript", "vbnet", "yaml", "properties", "1c", "armasm", "avrasm", "actionscript", "ada", "angelscript", "accesslog", "apache", "applescript", "arcade", "arduino", "asciidoc", "aspectj", "abnf", "autohotkey", "autoit", "awk", "basic", "bnf", "dos", "brainfuck", "cal", "cmake", "csp", "cos", "capnproto", "ceylon", "clean", "clojure", "clojure-repl", "coffeescript", "coq", "crystal", "d", "dns", "dart", "delphi", "dts", "django", "dockerfile", "dust", "erb", "elixir", "elm", "erlang", "erlang-repl", "excel", "ebnf", "fsharp", "fix", "flix", "fortran", "gcode", "gams", "gauss", "glsl", "gml", "gherkin", "golo", "gradle", "groovy", "haml", "hsp", "http", "handlebars", "haskell", "haxe", "hy", "irpf90", "isbl", "inform7", "x86asm", "jboss-cli", "julia", "julia-repl", "ldif", "llvm", "lsl", "latex", "lasso", "leaf", "lisp", "livecodeserver", "livescript", "mel", "mipsasm", "matlab", "maxima", "mercury", "axapta", "routeros", "mizar", "mojolicious", "monkey", "moonscript", "n1ql", "nsis", "nestedtext", "nginx", "nim", "nix", "node-repl", "ocaml", "openscad", "ruleslanguage", "oxygene", "pf", "parser3", "pony", "pgsql", "powershell", "processing", "prolog", "protobuf", "puppet", "purebasic", "profile", "q", "qml", "reasonml", "rib", "rsl", "roboconf", "sas", "sml", "sqf", "step21", "scala", "scheme", "scilab", "smali", "smalltalk", "stan", "stata", "stylus", "subunit", "tp", "taggerscript", "tcl", "tap", "thrift", "twig", "vbscript", "vbscript-html", "vhdl", "vala", "verilog", "vim", "wasm", "mathematica", "wren", "xl", "xquery", "zephir", "crmsh", "dsconfig", "graphql",
     // third: "yul", "solidity", "abap", "hlsl", "gdscript"
     public static readonly ALIAS_CODE_LANGUAGES: string[] = [
-        "js", "ts", "html", "toml", "c#", "bat",
+        "js", "ts", "html", "toml", "c#", "bat"
     ];
     public static readonly SIYUAN_RENDER_CODE_LANGUAGES: string[] = [
         "abc", "plantuml", "mermaid", "flowchart", "echarts", "mindmap", "graphviz", "math"
@@ -798,7 +800,4 @@ export abstract class Constants {
         "inline-math",
         "inline-memo",
     ];
-
-    // Google Analytics 事件
-    public static readonly ANALYTICS_EVT_ON_GET_CONFIG: string = "siyuan.onGetConfig";
 }

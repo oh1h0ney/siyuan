@@ -22,6 +22,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/88250/gulu"
 	"github.com/88250/lute/ast"
@@ -87,6 +88,30 @@ func (tx *Transaction) doUnfoldHeading(operation *Operation) (ret *TxErr) {
 		return &TxErr{code: TxErrCodeBlockNotFound, id: headingID}
 	}
 
+	luteEngine := NewLute()
+	parentFoldedHeading := treenode.GetParentFoldedHeading(heading)
+	if nil != parentFoldedHeading {
+		// 如果当前标题在上方某个折叠的标题下方，则展开上方那个折叠标题以保持一致性
+		children := treenode.HeadingChildren(parentFoldedHeading)
+		for _, child := range children {
+			ast.Walk(child, func(n *ast.Node, entering bool) ast.WalkStatus {
+				if !entering || !n.IsBlock() {
+					return ast.WalkContinue
+				}
+
+				n.RemoveIALAttr("heading-fold")
+				n.RemoveIALAttr("fold")
+				return ast.WalkContinue
+			})
+		}
+		parentFoldedHeading.RemoveIALAttr("fold")
+		parentFoldedHeading.RemoveIALAttr("heading-fold")
+		go func() {
+			tx.WaitForCommit()
+			ReloadProtyle(tree.ID)
+		}()
+	}
+
 	children := treenode.HeadingChildren(heading)
 	for _, child := range children {
 		ast.Walk(child, func(n *ast.Node, entering bool) ast.WalkStatus {
@@ -115,7 +140,6 @@ func (tx *Transaction) doUnfoldHeading(operation *Operation) (ret *TxErr) {
 	// 展开折叠的标题后显示块引用计数 Display reference counts after unfolding headings https://github.com/siyuan-note/siyuan/issues/13618
 	fillBlockRefCount(children)
 
-	luteEngine := NewLute()
 	operation.RetData = renderBlockDOMByNodes(children, luteEngine)
 	return
 }
@@ -199,6 +223,7 @@ func Doc2Heading(srcID, targetID string, after bool) (srcTreeBox, srcTreePath st
 	heading := &ast.Node{ID: srcTree.Root.ID, Type: ast.NodeHeading, HeadingLevel: headingLevel, KramdownIAL: srcTree.Root.KramdownIAL}
 	heading.SetIALAttr("updated", util.CurrentTimeSecondsStr())
 	heading.AppendChild(&ast.Node{Type: ast.NodeText, Tokens: []byte(srcTree.Root.IALAttr("title"))})
+	heading.RemoveIALAttr("title")
 	heading.Box, heading.Path = targetTree.Box, targetTree.Path
 	if "" != tagIAL && 0 < len(tags) {
 		// 带标签的文档块转换为标题块时将标签移动到标题块下方 https://github.com/siyuan-note/siyuan/issues/6550
@@ -272,10 +297,10 @@ func Doc2Heading(srcID, targetID string, after bool) (srcTreeBox, srcTreePath st
 	treenode.RemoveBlockTreesByRootID(targetTree.ID)
 	err = indexWriteTreeUpsertQueue(targetTree)
 	IncSync()
-	RefreshBacklink(srcTree.ID)
-	RefreshBacklink(targetTree.ID)
 	go func() {
-		sql.FlushQueue()
+		time.Sleep(util.SQLFlushInterval)
+		RefreshBacklink(srcTree.ID)
+		RefreshBacklink(targetTree.ID)
 		ResetVirtualBlockRefCache()
 	}()
 	return
@@ -412,10 +437,9 @@ func Heading2Doc(srcHeadingID, targetBoxID, targetPath, previousPath string) (sr
 		return "", "", err
 	}
 	IncSync()
-	RefreshBacklink(srcTree.ID)
-	RefreshBacklink(newTree.ID)
 	go func() {
-		sql.FlushQueue()
+		RefreshBacklink(srcTree.ID)
+		RefreshBacklink(newTree.ID)
 		ResetVirtualBlockRefCache()
 	}()
 	return

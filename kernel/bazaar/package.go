@@ -53,6 +53,7 @@ type DisplayName struct {
 	ItIT    string `json:"it_IT"`
 	JaJP    string `json:"ja_JP"`
 	PlPL    string `json:"pl_PL"`
+	PtBR    string `json:"pt_BR"`
 	RuRU    string `json:"ru_RU"`
 	ZhCHT   string `json:"zh_CHT"`
 	ZhCN    string `json:"zh_CN"`
@@ -69,6 +70,7 @@ type Description struct {
 	ItIT    string `json:"it_IT"`
 	JaJP    string `json:"ja_JP"`
 	PlPL    string `json:"pl_PL"`
+	PtBR    string `json:"pt_BR"`
 	RuRU    string `json:"ru_RU"`
 	ZhCHT   string `json:"zh_CHT"`
 	ZhCN    string `json:"zh_CN"`
@@ -85,6 +87,7 @@ type Readme struct {
 	ItIT    string `json:"it_IT"`
 	JaJP    string `json:"ja_JP"`
 	PlPL    string `json:"pl_PL"`
+	PtBR    string `json:"pt_BR"`
 	RuRU    string `json:"ru_RU"`
 	ZhCHT   string `json:"zh_CHT"`
 	ZhCN    string `json:"zh_CN"`
@@ -98,17 +101,18 @@ type Funding struct {
 }
 
 type Package struct {
-	Author        string       `json:"author"`
-	URL           string       `json:"url"`
-	Version       string       `json:"version"`
-	MinAppVersion string       `json:"minAppVersion"`
-	Backends      []string     `json:"backends"`
-	Frontends     []string     `json:"frontends"`
-	DisplayName   *DisplayName `json:"displayName"`
-	Description   *Description `json:"description"`
-	Readme        *Readme      `json:"readme"`
-	Funding       *Funding     `json:"funding"`
-	Keywords      []string     `json:"keywords"`
+	Author            string       `json:"author"`
+	URL               string       `json:"url"`
+	Version           string       `json:"version"`
+	MinAppVersion     string       `json:"minAppVersion"`
+	DisabledInPublish bool         `json:"disabledInPublish"`
+	Backends          []string     `json:"backends"`
+	Frontends         []string     `json:"frontends"`
+	DisplayName       *DisplayName `json:"displayName"`
+	Description       *Description `json:"description"`
+	Readme            *Readme      `json:"readme"`
+	Funding           *Funding     `json:"funding"`
+	Keywords          []string     `json:"keywords"`
 
 	PreferredFunding string `json:"preferredFunding"`
 	PreferredName    string `json:"preferredName"`
@@ -220,6 +224,10 @@ func getPreferredReadme(readme *Readme) string {
 		if "" != readme.PlPL {
 			ret = readme.PlPL
 		}
+	case "pt_BR":
+		if "" != readme.PtBR {
+			ret = readme.PtBR
+		}
 	case "ru_RU":
 		if "" != readme.RuRU {
 			ret = readme.RuRU
@@ -286,6 +294,10 @@ func GetPreferredName(pkg *Package) string {
 		if "" != pkg.DisplayName.PlPL {
 			ret = pkg.DisplayName.PlPL
 		}
+	case "pt_BR":
+		if "" != pkg.DisplayName.PtBR {
+			ret = pkg.DisplayName.PtBR
+		}
 	case "ru_RU":
 		if "" != pkg.DisplayName.RuRU {
 			ret = pkg.DisplayName.RuRU
@@ -351,6 +363,10 @@ func getPreferredDesc(desc *Description) string {
 	case "pl_PL":
 		if "" != desc.PlPL {
 			ret = desc.PlPL
+		}
+	case "pt_BR":
+		if "" != desc.PtBR {
+			ret = desc.PtBR
 		}
 	case "ru_RU":
 		if "" != desc.RuRU {
@@ -552,7 +568,7 @@ func isOutdatedTheme(theme *Theme, bazaarThemes []*Theme) bool {
 	}
 
 	for _, pkg := range bazaarThemes {
-		if theme.URL == pkg.URL && theme.Name == pkg.Name && theme.Author == pkg.Author && 0 > semver.Compare("v"+theme.Version, "v"+pkg.Version) {
+		if theme.URL == pkg.URL && theme.Name == pkg.Name && 0 > semver.Compare("v"+theme.Version, "v"+pkg.Version) {
 			theme.RepoHash = pkg.RepoHash
 			return true
 		}
@@ -572,7 +588,7 @@ func isOutdatedIcon(icon *Icon, bazaarIcons []*Icon) bool {
 	}
 
 	for _, pkg := range bazaarIcons {
-		if icon.URL == pkg.URL && icon.Name == pkg.Name && icon.Author == pkg.Author && 0 > semver.Compare("v"+icon.Version, "v"+pkg.Version) {
+		if icon.URL == pkg.URL && icon.Name == pkg.Name && 0 > semver.Compare("v"+icon.Version, "v"+pkg.Version) {
 			icon.RepoHash = pkg.RepoHash
 			return true
 		}
@@ -592,7 +608,7 @@ func isOutdatedPlugin(plugin *Plugin, bazaarPlugins []*Plugin) bool {
 	}
 
 	for _, pkg := range bazaarPlugins {
-		if plugin.URL == pkg.URL && plugin.Name == pkg.Name && plugin.Author == pkg.Author && 0 > semver.Compare("v"+plugin.Version, "v"+pkg.Version) {
+		if plugin.URL == pkg.URL && plugin.Name == pkg.Name && 0 > semver.Compare("v"+plugin.Version, "v"+pkg.Version) {
 			plugin.RepoHash = pkg.RepoHash
 			return true
 		}
@@ -612,7 +628,7 @@ func isOutdatedWidget(widget *Widget, bazaarWidgets []*Widget) bool {
 	}
 
 	for _, pkg := range bazaarWidgets {
-		if widget.URL == pkg.URL && widget.Name == pkg.Name && widget.Author == pkg.Author && 0 > semver.Compare("v"+widget.Version, "v"+pkg.Version) {
+		if widget.URL == pkg.URL && widget.Name == pkg.Name && 0 > semver.Compare("v"+widget.Version, "v"+pkg.Version) {
 			widget.RepoHash = pkg.RepoHash
 			return true
 		}
@@ -632,7 +648,7 @@ func isOutdatedTemplate(template *Template, bazaarTemplates []*Template) bool {
 	}
 
 	for _, pkg := range bazaarTemplates {
-		if template.URL == pkg.URL && template.Name == pkg.Name && template.Author == pkg.Author && 0 > semver.Compare("v"+template.Version, "v"+pkg.Version) {
+		if template.URL == pkg.URL && template.Name == pkg.Name && 0 > semver.Compare("v"+template.Version, "v"+pkg.Version) {
 			template.RepoHash = pkg.RepoHash
 			return true
 		}
@@ -981,9 +997,10 @@ func getBazaarIndex() map[string]*bazaarPackage {
 const defaultMinAppVersion = "2.9.0"
 
 func disallowDisplayBazaarPackage(pkg *Package) bool {
-	if "" == pkg.MinAppVersion { // TODO: 目前暂时放过所有不带 minAppVersion 的集市包，后续版本会使用 defaultMinAppVersion
-		return false
+	if "" == pkg.MinAppVersion {
+		pkg.MinAppVersion = defaultMinAppVersion
 	}
+
 	if 0 < semver.Compare("v"+pkg.MinAppVersion, "v"+util.Ver) {
 		return true
 	}

@@ -645,7 +645,7 @@ const initKernel = (workspace, port, lang, hostname, tlsKernel, tlsCertFile, tls
                     resolve(false);
                     return;
                 }
-                await sleep(200);
+                await sleep(500);
             }
         }
 
@@ -694,6 +694,7 @@ app.commandLine.appendSwitch("disable-web-security");
 app.commandLine.appendSwitch("auto-detect", "false");
 app.commandLine.appendSwitch("no-proxy-server");
 app.commandLine.appendSwitch("enable-features", "PlatformHEVCDecoderSupport");
+app.commandLine.appendSwitch("xdg-portal-required-version", "4");
 
 // Support set Chromium command line arguments on the desktop https://github.com/siyuan-note/siyuan/issues/9696
 writeLog("app is packaged [" + app.isPackaged + "], command line args [" + process.argv.join(", ") + "]");
@@ -730,6 +731,10 @@ for (let i = argStart; i < process.argv.length; i++) {
 
 app.whenReady().then(() => {
     const resetTrayMenu = (tray, lang, mainWindow) => {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+            return;
+        }
+
         const trayMenuTemplate = [{
             label: mainWindow.isVisible() ? lang.hideWindow : lang.showWindow, click: () => {
                 showHideWindow(tray, lang, mainWindow);
@@ -778,6 +783,10 @@ app.whenReady().then(() => {
         }
     };
     const showHideWindow = (tray, lang, mainWindow) => {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+            return;
+        }
+
         if (!mainWindow.isVisible()) {
             if (mainWindow.isMinimized()) {
                 mainWindow.restore();
@@ -813,9 +822,6 @@ app.whenReady().then(() => {
         })];
         const menu = Menu.buildFromTemplate(template);
         menu.popup({window: BrowserWindow.fromWebContents(event.sender)});
-    });
-    ipcMain.on("siyuan-open-folder", (event, filePath) => {
-        shell.showItemInFolder(filePath);
     });
     ipcMain.on("siyuan-first-quit", () => {
         app.exit();
@@ -924,6 +930,12 @@ app.whenReady().then(() => {
         }
         const currentWindow = getWindowByContentId(webContentsId);
         switch (cmd) {
+            case "showItemInFolder":
+                shell.showItemInFolder(data.filePath);
+                break;
+            case "openPath":
+                shell.openPath(data.filePath);
+                break;
             case "openDevTools":
                 event.sender.openDevTools({mode: "bottom"});
                 break;
@@ -1162,23 +1174,24 @@ app.whenReady().then(() => {
         if (exitWS) {
             return;
         }
-        let tray;
-        if ("win32" === process.platform || "linux" === process.platform) {
-            // 系统托盘
-            tray = new Tray(path.join(appDir, "stage", "icon-large.png"));
-            tray.setToolTip(`${path.basename(data.workspaceDir)} - SiYuan v${appVer}`);
-            const mainWindow = getWindowByContentId(event.sender.id);
-            if (!mainWindow) {
-                return;
-            }
-            resetTrayMenu(tray, data.languages, mainWindow);
-            tray.on("click", () => {
-                showHideWindow(tray, data.languages, mainWindow);
-            });
-        }
+
         workspaces.find(item => {
             if (!item.workspaceDir) {
                 item.workspaceDir = data.workspaceDir;
+                let tray;
+                if ("win32" === process.platform || "linux" === process.platform) {
+                    // 系统托盘
+                    tray = new Tray(path.join(appDir, "stage", "icon-large.png"));
+                    tray.setToolTip(`${path.basename(data.workspaceDir)} - SiYuan v${appVer}`);
+                    const mainWindow = getWindowByContentId(event.sender.id);
+                    if (!mainWindow || mainWindow.isDestroyed()) {
+                        return;
+                    }
+                    resetTrayMenu(tray, data.languages, mainWindow);
+                    tray.on("click", () => {
+                        showHideWindow(tray, data.languages, mainWindow);
+                    });
+                }
                 item.tray = tray;
                 return true;
             }

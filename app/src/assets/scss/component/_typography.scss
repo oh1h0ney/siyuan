@@ -1,3 +1,5 @@
+@use "../util/function";
+
 @font-face {
   font-family: 'JetBrainsMono-Regular';
   /*! /* webpackIgnore: true */
@@ -170,11 +172,6 @@
   h5,
   h6 {
     font-weight: 600;
-    line-height: 1.25;
-
-    & > [spellcheck] {
-      min-height: 1.25em;
-    }
   }
 
   h1,
@@ -310,15 +307,13 @@
         color: var(--b3-theme-on-surface);
         margin-top: -4px;
         align-self: center;
+        margin-left: 1em;
+        opacity: 0;
+        transition: var(--b3-transition);
+        line-height: calc(1.625 / 0.85);
       }
 
       .protyle-icon {
-        opacity: 0;
-        transition: var(--b3-transition);
-      }
-
-      .protyle-action__language {
-        margin-left: 1em;
         opacity: 0;
         transition: var(--b3-transition);
       }
@@ -350,10 +345,11 @@
   [data-subtype="echarts"],
   [data-subtype="mindmap"] {
     z-index: 1;
+    height: 420px;
+    box-sizing: border-box;
 
     & > div:not(.protyle-icons):not(.protyle-attr) {
       overflow: hidden;
-      height: 420px;
     }
   }
 
@@ -417,6 +413,8 @@
     text-align: center;
   }
 
+  [data-subtype="flowchart"] > [spin="1"],
+  [data-subtype="plantuml"] > [spin="1"],
   [data-subtype="mermaid"] > [spin="1"] {
     // 不能加到上一级，否则属性会跟随滚动
     overflow: auto;
@@ -441,7 +439,6 @@
     vertical-align: top; // https://ld246.com/article/1647522074722
     margin: 0 auto;
     max-width: 100%;
-    user-select: none;
     word-break: keep-all;
     white-space: nowrap;
 
@@ -509,6 +506,20 @@
 
   table {
     margin: 1em 0;
+
+    &[style*="direction: rtl"]:not([style*="text-align: left"]),
+    &[style*="text-align: right"] {
+      margin-left: auto;
+    }
+
+    &[style*="text-align: center"] {
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    &[style*="direction: ltr"]:not([style*="text-align: right"]) {
+      margin-left: initial;
+    }
   }
 
   div[data-subtype="math"] {
@@ -597,11 +608,15 @@
     & > span {
       pointer-events: none;
       display: block;
+      color: var(--b3-theme-on-surface);
+
+      &:not(:empty)::before {
+        content: "";
+      }
 
       &::before {
         counter-increment: linenumber;
         content: counter(linenumber);
-        color: var(--b3-theme-on-surface);
         display: block;
         text-align: right;
         white-space: nowrap;

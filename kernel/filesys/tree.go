@@ -35,12 +35,17 @@ import (
 	"github.com/siyuan-community/siyuan/kernel/cache"
 	"github.com/siyuan-community/siyuan/kernel/treenode"
 	"github.com/siyuan-community/siyuan/kernel/util"
+	"github.com/siyuan-note/dataparser"
 	"github.com/siyuan-note/filelock"
 	"github.com/siyuan-note/logging"
 )
 
 func LoadTrees(ids []string) (ret map[string]*parse.Tree) {
 	ret = map[string]*parse.Tree{}
+	if 1 > len(ids) {
+		return ret
+	}
+
 	bts := treenode.GetBlockTrees(ids)
 	luteEngine := util.NewLute()
 	var boxIDs []string
@@ -201,6 +206,12 @@ func DocIAL(absPath string) (ret map[string]string) {
 	return
 }
 
+func TreeSize(tree *parse.Tree) (size uint64) {
+	luteEngine := util.NewLute() // 不关注用户的自定义解析渲染选项
+	renderer := render.NewJSONRenderer(tree, luteEngine.RenderOptions)
+	return uint64(len(renderer.Render()))
+}
+
 func WriteTree(tree *parse.Tree) (size uint64, err error) {
 	data, filePath, err := prepareWriteTree(tree)
 	if err != nil {
@@ -213,6 +224,11 @@ func WriteTree(tree *parse.Tree) (size uint64, err error) {
 		logging.LogErrorf(msg)
 		err = errors.New(msg)
 		return
+	}
+
+	if util.ExceedLargeFileWarningSize(len(data)) {
+		msg := fmt.Sprintf(util.Langs[util.Lang][268], tree.Root.IALAttr("title")+" "+filepath.Base(filePath), util.LargeFileWarningSize)
+		util.PushErrMsg(msg, 7000)
 	}
 
 	afterWriteTree(tree)
@@ -238,11 +254,13 @@ func prepareWriteTree(tree *parse.Tree) (data []byte, filePath string, err error
 	tree.Root.SetIALAttr("type", "doc")
 	renderer := render.NewJSONRenderer(tree, luteEngine.RenderOptions)
 	data = renderer.Render()
+	data = bytes.ReplaceAll(data, []byte("\u0000"), []byte(""))
 
 	if !util.UseSingleLineSave {
 		buf := bytes.Buffer{}
 		buf.Grow(1024 * 1024 * 2)
 		if err = json.Indent(&buf, data, "", "\t"); err != nil {
+			logging.LogErrorf("json indent failed: %s", err)
 			return
 		}
 		data = buf.Bytes()
@@ -262,7 +280,7 @@ func afterWriteTree(tree *parse.Tree) {
 func parseJSON2Tree(boxID, p string, jsonData []byte, luteEngine *lute.Lute) (ret *parse.Tree) {
 	var err error
 	var needFix bool
-	ret, needFix, err = ParseJSON(jsonData, luteEngine.ParseOptions)
+	ret, needFix, err = dataparser.ParseJSON(jsonData, luteEngine.ParseOptions)
 	if err != nil {
 		logging.LogErrorf("parse json [%s] to tree failed: %s", boxID+p, err)
 		return
